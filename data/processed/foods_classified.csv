@@ -1,0 +1,167 @@
+food_id,food_name,protein_g,fat_g,carbs_g,fiber_g,calories,food_type
+2768188,"Alaska Pollock, raw",17.33,0.9925,0.0565,0.0,78.4785,non_vegetarian
+2262074,"Almond butter, creamy",20.78734,53.04,21.23666,9.718,645.456,vegetarian
+2257045,"Almond milk, unsweetened, plain, refrigerated",0.65625,1.558,0.67075,0.0,19.33,vegetarian
+1750338,"Almond milk, unsweetened, plain, shelf stable",0.5546875,1.221,0.3371125,0.0,14.5562,vegetarian
+1105897,"Apples, fuji, with skin, raw",0.15,0.16,15.7,2.1,65.0,vegan
+1105781,"Apples, gala, with skin, raw",0.13,0.15,14.8,2.1,61.0,vegan
+1105664,"Apples, granny smith, with skin, raw",0.27,0.14,14.2,2.5,59.0,vegan
+1105547,"Apples, honeycrisp, with skin, raw",0.1,0.1,14.7,1.7,60.0,vegetarian
+1105430,"Apples, red delicious, with skin, raw",0.19,0.21,14.8,2.0,62.0,vegan
+2710815,"Apricot, with skin, raw",0.96125,0.405,10.23875,1.51,48.445,vegan
+2710822,"Arugula, baby, raw",1.64875,0.325,5.36825,2.28,30.993,vegan
+2710823,"Asparagus, green, raw",1.4375,0.2163,5.1012,1.883,28.1015,vegan
+790774,"Bananas, overripe, raw",0.73,0.22,20.1,1.7,85.0,vegan
+790991,"Bananas, ripe and slightly ripe, raw",0.74,0.29,23.0,1.7,97.0,vegan
+2346400,"Beans, snap, green, raw",1.96875,0.275,7.41245,3.011,39.9998,vegan
+2747653,"Beet greens, raw",1.609375,0.1438,4.658825,2.578,26.367,vegan
+2685576,"Beets, raw",1.6875,0.3025,8.787,3.119,44.6205,vegan
+325871,"Bread, white, commercially prepared",9.43,3.59,49.2,2.3,270.0,unknown
+335240,"Bread, whole-wheat, commercially prepared",12.3,3.55,43.1,6.0,254.0,vegan
+321900,"Broccoli, raw",2.57,0.34,6.29,2.4,32.0,vegan
+2685575,"Brussels sprouts, raw",3.984375,0.565,9.615625,4.785,59.485,vegan
+2512378,"Buckwheat, whole grain",11.06534,3.039,71.13066,4.046,356.135,vegan
+2710820,"Bulgur, dry, raw",11.75625,2.421,75.88175,11.72,372.341,vegan
+2685572,"Cabbage, bok choy, raw",1.02375,0.2338,3.51495,1.259,20.259,vegan
+2258587,"Carrots, baby, raw",0.805,0.1375,9.0787,2.694,40.7723,vegan
+746764,"Carrots, frozen, unprepared",0.81,0.47,7.92,3.2,37.0,vegan
+326458,"Carrots, frozen, unprepared (Includes foods for USDA's Food Distribution Program)",0.81,0.47,7.92,3.2,37.0,vegan
+2258586,"Carrots, mature, raw",0.94125,0.3506,10.26755,3.095,47.9906,vegan
+2685573,"Cauliflower, raw",1.640625,0.2375,4.723075,1.948,27.5923,vegan
+2685574,"Collards, raw",2.96875,0.77,7.02225,3.816,46.894,vegan
+333008,"Cookies, oatmeal, soft, with raisins",5.79,14.3,69.6,3.3,430.0,vegan
+2710835,"Corn flour, masa harina, white or yellow, dry, raw",7.5625,4.34,76.6895,7.038,376.068,vegan
+2710826,"Corn, sweet, yellow and white kernels,  fresh, raw",2.789375,1.626,14.689625,2.428,84.55,vegan
+2685577,"Eggplant, raw",0.851875,0.12,5.399325,2.448,26.0848,vegetarian
+748967,"Eggs, Grade A, Large, egg whole",12.4,9.96,0.96,0.0,148.0,vegetarian
+2710827,"Einkorn, grain, dry, raw",15.11719,3.811,68.65381,8.913,369.383,vegan
+2710828,"Farro, pearled, dry, raw",12.63944,3.103,72.13156,7.31,367.011,vegan
+2747655,"Fennel, bulb, raw",0.921875,0.14,5.486225,2.046,26.8924,vegan
+326905,"Figs, dried, uncooked",3.3,0.92,63.9,9.8,249.0,vegan
+2262075,"Flaxseed, ground",18.0359,37.28,34.3551,23.13,545.084,vegan
+2003586,"Flour, 00",11.4,1.52,74.4462,2.656,357.0648,vegan
+2261420,"Flour, almond",26.24375,50.23,16.24925,9.266,622.042,vegan
+2512371,"Flour, amaranth",13.2093,6.236,68.7787,7.209,384.076,vegan
+2512376,"Flour, barley",8.72168,2.45,77.39832,12.79,366.53,vegan
+2512374,"Flour, buckwheat",8.88492,2.484,75.01808,10.35,357.968,vegan
+2512377,"Flour, cassava",0.918225,0.4938,87.312975,4.834,357.369,vegan
+2515377,"Flour, chestnut",5.28675,4.636,80.45025,8.711,384.672,vegan
+2515382,"Flour, coconut",16.1385,15.28,58.9025,34.24,437.684,vegan
+790276,"Flour, corn, yellow, fine meal, enriched",6.2,1.74,80.8,4.3,364.0,vegan
+2261421,"Flour, oat, whole grain",13.16875,6.309,69.91725,10.5,389.125,vegan
+2261422,"Flour, potato",8.1125,0.9513,79.9422,5.401,360.7805,vegan
+2512372,"Flour, quinoa",11.92235,6.601,69.52465,6.295,385.197,vegan
+790214,"Flour, rice, white, unenriched",6.94,1.3,79.8,0.5,359.0,vegan
+2512375,"Flour, rye",8.3952,1.908,77.1618,13.68,359.4,vegan
+2003588,"Flour, semolina, coarse and semi-coarse",11.73125,1.597,73.82345,3.216,356.5918,vegan
+2003589,"Flour, semolina, fine",13.33125,1.838,71.98575,3.683,357.81,vegan
+2512373,"Flour, sorghum",8.27277,3.586,77.39123,6.019,374.93,vegan
+2003587,"Flour, spelt, whole grain",14.475,2.543,70.723,9.339,363.679,vegan
+790018,"Flour, wheat, all-purpose, unenriched, unbleached",12.0,1.7,74.6,3.0,362.0,vegan
+790085,"Flour, whole wheat, unenriched",15.1,2.73,71.2,10.6,370.0,vegan
+2710829,"Fonio, grain, dry, raw",7.16875,1.693,81.30525,2.197,369.133,vegan
+1104647,"Garlic, raw",6.62,0.38,28.2,2.7,143.0,vegan
+325287,"Grapefruit juice, white, canned or bottled, unsweetened",0.55,0.7,7.59,0.2,37.0,vegan
+321358,"Hummus, commercial",7.35,17.1,14.9,5.4,229.0,vegan
+323505,"Kale, raw",2.92,1.49,4.42,4.1,35.0,vegan
+2710830,"Khorasan, grain, dry, raw",14.75573,2.8,71.79427,10.52,371.4,vegan
+2710831,"Kiwifruit (kiwi), green, peeled, raw",1.008125,0.64,13.818075,2.129,65.0648,vegan
+327046,"Kiwifruit, green, raw",1.06,0.44,14.0,3.0,58.0,vegan
+327923,"Lettuce, cos or romaine, raw",1.24,0.26,3.24,1.8,17.0,vegan
+2710832,"Mandarin, seedless, peeled, raw",1.039375,0.4575,13.421825,1.328,61.9623,vegan
+2710834,"Mango, Ataulfo, peeled, raw",0.6875,0.6813,17.3962,1.289,78.4665,vegan
+2710833,"Mango, Tommy Atkins, peeled, raw",0.5625,0.5725,15.265,1.753,68.4625,vegan
+327198,"Melons, cantaloupe, raw",0.82,0.18,8.16,0.8,34.0,vegan
+2512379,"Millet, whole grain",10.02177,4.194,74.44623,2.619,375.618,vegan
+2003603,"Mushroom, beech",2.18,0.4494,6.7593,3.139,39.8018,vegan
+2003601,"Mushroom, crimini",3.09375,0.1967,4.01455,1.781,30.2035,vegan
+2003600,"Mushroom, enoki",2.416875,0.245,8.141425,2.945,44.4382,vegan
+2003599,"Mushroom, king oyster",2.40625,0.3075,8.50065,3.009,46.3951,non_vegetarian
+1999626,"Mushroom, lion's mane",2.5,0.2563,7.5897,4.376,42.6655,vegan
+2003602,"Mushroom, maitake",2.203125,0.265,6.604375,3.071,37.615,vegan
+1999627,"Mushroom, oyster",2.89875,0.1875,6.94125,2.85,41.0475,non_vegetarian
+2003604,"Mushroom, pioppini",3.5,0.24,5.7637,2.753,39.2148,vegan
+2003598,"Mushroom, portabella",2.75,0.3117,4.6583,1.879,32.4385,vegan
+1999628,"Mushrooms, shiitake",2.414375,0.195,8.170625,4.166,44.095,vegan
+1999629,"Mushrooms, white button",2.890625,0.3708,4.079375,1.717,31.2172,vegan
+326698,"Mustard, prepared, yellow",4.25,3.38,5.3,4.3,61.0,unknown
+327357,"Nectarines, raw",1.06,0.28,9.18,1.5,39.0,vegan
+323294,"Nuts, almonds, dry roasted, with salt added",20.4,57.8,16.2,11.0,620.0,vegan
+2346393,"Nuts, almonds, whole, raw",21.45038,51.09,20.03462,10.78,625.75,vegan
+2515373,"Nuts, brazilnuts, raw",15.03684,57.43,21.64216,5.984,663.586,vegan
+2515374,"Nuts, cashew nuts, raw",17.4423,38.86,36.2887,4.104,564.664,vegan
+2515375,"Nuts, hazelnuts or filberts, raw",13.4938,53.49,26.5012,8.41,641.39,vegan
+2515378,"Nuts, macadamia nuts, raw",7.7857,64.93,24.0943,7.563,711.89,vegan
+2346395,"Nuts, pecans, halves, raw",9.9587,73.28,12.6993,5.793,750.152,vegan
+2346392,"Nuts, pine nuts, raw",15.7039,61.27,18.5921,3.941,688.614,vegan
+2515379,"Nuts, pistachio nuts, raw",20.5057,45.02,27.6943,6.969,597.98,vegan
+2346394,"Nuts, walnuts, English, halves, raw",14.5644,69.74,10.9096,5.21,729.556,vegan
+2257046,"Oat milk, unsweetened, plain, refrigerated",0.796875,2.749,5.100325,0.0,48.3298,vegetarian
+332791,"Olives, green, Manzanilla, stuffed with pimiento",1.15,12.9,4.96,4.0,130.0,vegan
+324317,"Onion rings, breaded, par fried, frozen, prepared, heated in oven",4.52,14.4,36.3,2.4,288.0,vegan
+790577,"Onions, red, raw",0.94,0.1,9.93,2.2,44.0,vegan
+1104962,"Onions, white, raw",0.89,0.13,7.68,1.2,35.0,vegan
+790646,"Onions, yellow, raw",0.83,0.05,8.61,1.9,38.0,vegan
+746771,"Oranges, raw, navels",0.91,0.15,11.8,2.0,47.0,vegan
+327501,"Oranges, raw, navels (Includes foods for USDA's Food Distribution Program)",0.91,0.15,11.8,2.0,47.0,vegan
+2747659,"Parsnips, raw",1.265625,0.5381,19.292275,5.351,87.0745,vegan
+325430,"Peaches, yellow, raw",0.91,0.27,10.1,1.5,42.0,vegan
+2262072,"Peanut butter, creamy",23.99124,49.43,22.70376,6.323,631.65,vegetarian
+324860,"Peanut butter, smooth style, with salt",22.5,51.1,22.3,4.8,597.0,vegetarian
+2515376,"Peanuts, raw",23.205,43.28,26.498,8.014,588.332,vegan
+2710836,"Pear, Anjou, green, with skin, raw",0.3125,0.3713,14.7674,2.636,63.6613,vegan
+746773,"Pears, raw, bartlett",0.38,0.16,15.1,3.1,57.0,vegan
+332597,"Pears, raw, bartlett (Includes foods for USDA's Food Distribution Program)",0.38,0.16,15.1,3.1,57.0,vegan
+2747660,"Peppers, banana or Hungarian wax, seeded, raw",0.723125,0.1314,4.966175,1.79,23.9398,vegan
+2258588,"Peppers, bell, green, raw",0.715,0.1063,4.7781,0.9419,22.9291,vegan
+2258591,"Peppers, bell, orange, raw",0.881875,0.1556,6.703125,0.9674,31.7404,vegan
+2258590,"Peppers, bell, red, raw",0.895625,0.1256,6.653175,1.158,31.3256,vegan
+2258589,"Peppers, bell, yellow, raw",0.819375,0.1211,6.601725,1.071,30.7743,vegan
+2747661,"Peppers, jalapeno, seeded, raw",0.621125,0.1488,5.075675,1.725,24.1264,vegan
+2747662,"Peppers, poblano, seeded, raw",1.425625,0.1906,5.143175,2.07,27.9906,vegan
+2747663,"Peppers, serrano, seeded, raw",0.855625,0.1406,6.136275,2.521,29.233,vegan
+324653,"Pickles, cucumber, dill or kosher dill",0.48,0.43,1.99,1.0,12.0,unknown
+2346398,"Pineapple, raw",0.4609375,0.2113,14.0914625,0.9346,60.1113,vegan
+2710843,"Plantains, overripe, raw",1.166875,0.99,29.191425,1.792,130.3432,vegan
+2710817,"Plantains, ripe, raw",1.15625,0.8933,30.95215,2.125,136.4733,vegan
+2710818,"Plantains, underripe, raw",1.229375,0.685,33.587325,2.53,145.4318,vegan
+2710837,"Plum, black, with skin, raw",0.578125,0.2825,13.455575,1.346,58.6773,vegan
+2747664,"Radicchio, raw",1.30875,0.1431,4.96125,2.114,26.3679,vegan
+2747665,"Radishes, red, raw",0.65625,0.08313,4.05682,1.314,19.60045,vegan
+334462,"Restaurant, Chinese, sweet and sour pork",8.88,13.6,25.5,1.0,260.0,non_vegetarian
+334720,"Restaurant, Latino, pupusas con frijoles (pupusas, bean)",5.59,9.01,31.5,5.8,229.0,vegan
+334628,"Restaurant, Latino, tamale, pork",7.38,9.04,15.8,2.4,174.0,non_vegetarian
+2710825,"Rice, black, unenriched, raw",7.56875,3.438,77.18825,4.179,369.97,vegan
+2512380,"Rice, brown, long grain, unenriched, raw",7.25305,3.306,76.68795,3.021,365.518,vegan
+2710838,"Rice, red, unenriched, dry, raw",8.5625,3.44,76.1545,4.198,369.828,vegan
+2512381,"Rice, white, long grain, unenriched, raw",7.03885,1.033,80.31315,0.1488,358.705,vegan
+332282,"Sauce, pasta, spaghetti/marinara, ready-to-serve",1.41,1.48,8.05,1.8,45.0,unknown
+324038,"Sauce, salsa, ready-to-serve",1.44,0.19,6.74,1.8,29.0,unknown
+2515380,"Seeds, pumpkin seeds (pepitas), raw",29.9079,40.03,18.6751,5.079,554.602,vegan
+325524,"Seeds, sunflower seed kernels, dry roasted, with salt added",21.0,56.1,17.1,10.3,612.0,vegan
+2515381,"Seeds, sunflower seed, kernel, raw",18.8733,48.44,24.5007,7.215,609.456,vegan
+2262073,"Sesame butter, creamy",19.7054,62.4,14.179,8.372,697.1376,vegetarian
+2710839,"Sorghum bran, white, unenriched, dry, raw",11.16875,9.259,68.69525,34.95,402.787,vegan
+2710840,"Sorghum flour, white, pearled, unenriched, dry, raw",10.2125,3.238,73.5065,3.299,364.018,vegan
+2710841,"Sorghum grain, white, pearled, unenriched, dry, raw",10.25,3.265,74.872,3.916,369.873,vegan
+2710842,"Sorghum, whole grain, white, dry, raw",10.08125,4.219,73.57375,8.274,372.591,vegan
+2257044,"Soy milk, sweetened, plain, refrigerated",2.776875,1.957,2.996125,0.0,40.705,vegetarian
+1750337,"Soy milk, unsweetened, plain, shelf stable",3.546875,2.125,1.293125,0.0,38.485,vegetarian
+1750352,"Spinach, baby",2.851875,0.6188,2.406325,1.558,26.602,vegan
+1750353,"Spinach, mature",2.90625,0.6044,2.64135,1.588,27.63,vegan
+2685568,"Squash, summer, green, zucchini, includes skin, raw",0.984375,0.205,3.27,0.7525,19.0,vegan
+2685569,"Squash, summer, yellow, includes skin, raw",0.890625,0.135,4.39,0.9563,22.0,vegan
+2685571,"Squash, winter, acorn, raw",1.25,0.1825,10.48,2.635,48.5625,vegan
+2685570,"Squash, winter, butternut, raw",1.14875,0.1675,10.50745,1.959,48.1323,vegetarian
+327699,"Strawberries, raw",0.64,0.22,7.63,1.8,31.0,vegan
+2685580,"Tomato, paste, canned, without salt added",4.234375,0.7325,20.188125,4.704,104.2825,vegan
+2685582,"Tomato, puree, canned",1.578125,0.265,8.036875,1.971,40.845,vegan
+1750354,"Tomato, roma",0.695625,0.425,3.837475,0.9706,21.9574,vegan
+2685579,"Tomato, sauce, canned, with salt added",1.351875,0.3825,6.331625,1.636,34.1765,vegan
+2685581,"Tomatoes, crushed, canned",1.4375,0.3975,7.137,1.944,37.8755,vegan
+321360,"Tomatoes, grape, raw",0.83,0.63,5.51,2.1,27.0,vegan
+2685578,"Tomatoes, whole, canned, solids and liquids, with salt added",0.8675,0.2063,4.2874,0.8725,22.4763,vegan
+2747674,"Turnips, raw",0.953125,0.1188,7.274975,1.915,33.9816,vegan
+2747676,"Watermelon, seedless, rind only, raw",0.53125,0.07,4.166,1.535,19.419,vegan
+2710821,"Wild rice, dry, raw",12.7875,1.704,75.6695,4.26,369.164,vegan
+330415,"Yogurt, Greek, strawberry, nonfat",8.06,0.15,12.2,0.6,83.0,vegetarian

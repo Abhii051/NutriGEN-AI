@@ -1,0 +1,13 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment variables and secrets
+.env
+
+# Raw USDA source data
+data/raw/usda/
