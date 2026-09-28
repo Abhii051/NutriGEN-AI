@@ -11,3 +11,6 @@ venv/
 
 # Raw USDA source data
 data/raw/usda/
+data/raw/usda_sr_legacy/
+# Trained model artifacts
+models/
