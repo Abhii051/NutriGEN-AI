@@ -1,33 +1,31 @@
 
 import pandas as pd
 import joblib
-import os
 
-from sklearn.feature_extraction.text import TfidfVectorizer
+from pathlib import Path
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 
-# Load datasets
-train = pd.read_csv("data/processed/foods_train.csv")
-test = pd.read_csv("data/processed/foods_test.csv")
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Separate features and target
-target = "food_type"
+DATA_DIR = BASE_DIR / "data" / "processed"
+MODEL_DIR = BASE_DIR / "models"
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-X_train = train.drop(columns=[target])
-y_train = train[target]
+train_file = DATA_DIR / "foods_train.csv"
+test_file = DATA_DIR / "foods_test.csv"
 
-X_test = test.drop(columns=[target])
-y_test = test[target]
+train_df = pd.read_csv(train_file)
+test_df = pd.read_csv(test_file)
 
-# Correct column names
-text_column = "food_name"
+text_feature = "food_name"
 
-numeric_columns = [
+numeric_features = [
     "calories",
     "protein_g",
     "fat_g",
@@ -35,30 +33,33 @@ numeric_columns = [
     "fiber_g"
 ]
 
-# Preprocessing
-preprocessor = ColumnTransformer(
-    transformers=[
-        (
-            "text",
-            TfidfVectorizer(
-                max_features=5000,
-                ngram_range=(1, 2),
-                strip_accents="unicode"
-            ),
-            text_column
-        ),
-        (
-            "numeric",
-            Pipeline([
-                ("imputer", SimpleImputer(strategy="median")),
-                ("scaler", StandardScaler())
-            ]),
-            numeric_columns
-        )
-    ]
+target = "food_type_final"
+
+X_train = train_df[[text_feature] + numeric_features]
+y_train = train_df[target]
+
+X_test = test_df[[text_feature] + numeric_features]
+y_test = test_df[target]
+
+# Text processing
+text_transformer = TfidfVectorizer(
+    max_features=5000,
+    ngram_range=(1, 2),
+    strip_accents="unicode"
 )
 
-# Build model
+# Numeric preprocessing
+numeric_transformer = Pipeline([
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler())
+])
+
+preprocessor = ColumnTransformer([
+    ("text", text_transformer, text_feature),
+    ("numeric", numeric_transformer, numeric_features)
+])
+
+# Classifier
 model = Pipeline([
     ("preprocessor", preprocessor),
     ("classifier", RandomForestClassifier(
@@ -69,23 +70,22 @@ model = Pipeline([
     ))
 ])
 
-# Train
-print("Training model...")
+print("Training classifier...")
+
 model.fit(X_train, y_train)
 
-# Predict
-print("Evaluating model...")
 y_pred = model.predict(X_test)
 
-# Evaluation
-print("\nAccuracy:", accuracy_score(y_test, y_pred))
+accuracy = accuracy_score(y_test, y_pred)
+
+print("\nTest Accuracy:", round(accuracy * 100, 2), "%")
 
 print("\nClassification Report:")
-print(classification_report(y_test, y_pred))
+print(classification_report(y_test, y_pred, zero_division=0))
 
-# Save model
-os.makedirs("models", exist_ok=True)
+model_path = MODEL_DIR / "food_classifier.pkl"
 
-joblib.dump(model, "models/food_classifier.pkl")
+joblib.dump(model, model_path)
 
-print("\nModel saved to models/food_classifier.pkl")
+print("\nModel saved to:")
+print(model_path)

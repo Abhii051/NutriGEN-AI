@@ -1,14 +1,34 @@
+
 import pandas as pd
+from pathlib import Path
 from sklearn.model_selection import train_test_split
 
-# Load the classified dataset
-df = pd.read_csv("data/processed/foods_for_training.csv")
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Features and labels
-X = df.drop(columns=["food_type"])
-y = df["food_type"]
+INPUT_FILE = (
+    BASE_DIR / "data" / "processed"
+    / "foods_final_training.csv"
+)
 
-# Split: 80% training, 20% testing
+OUTPUT_DIR = BASE_DIR / "data" / "processed"
+
+df = pd.read_csv(INPUT_FILE)
+
+# Features and target
+X = df[
+    [
+        "food_name",
+        "calories",
+        "protein_g",
+        "fat_g",
+        "carbs_g",
+        "fiber_g"
+    ]
+]
+
+y = df["food_type_final"]
+
+# Stratified 80/20 split
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,
@@ -17,23 +37,28 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y
 )
 
-# Save the datasets
-train = X_train.copy()
-train["food_type"] = y_train
+train_df = X_train.copy()
+train_df["food_type_final"] = y_train
 
-test = X_test.copy()
-test["food_type"] = y_test
+test_df = X_test.copy()
+test_df["food_type_final"] = y_test
 
-train.to_csv("data/processed/foods_train.csv", index=False)
-test.to_csv("data/processed/foods_test.csv", index=False)
+train_file = OUTPUT_DIR / "foods_train.csv"
+test_file = OUTPUT_DIR / "foods_test.csv"
 
-print("Training records:", len(train))
-print("Testing records:", len(test))
+train_df.to_csv(train_file, index=False)
+test_df.to_csv(test_file, index=False)
 
-print("\nTraining class distribution:")
-print(train["food_type"].value_counts())
+print("Total records:", len(df))
+print("Training records:", len(train_df))
+print("Testing records:", len(test_df))
 
-print("\nTesting class distribution:")
-print(test["food_type"].value_counts())
+print("\nTraining class counts:")
+print(y_train.value_counts())
 
-print("\nDataset split completed!")
+print("\nTesting class counts:")
+print(y_test.value_counts())
+
+print("\nSaved:")
+print(train_file)
+print(test_file)

@@ -4,8 +4,7 @@ from pathlib import Path
 # Project paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-INPUT_FILE = BASE_DIR / "data" / "processed" / "foods_classified.csv"
-
+INPUT_FILE = BASE_DIR / "data" / "processed" / "foods_combined_classified_reviewed.csv"
 
 def validate_dataset():
 
