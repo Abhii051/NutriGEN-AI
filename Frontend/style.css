@@ -1,0 +1,408 @@
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background: #f7f9f6;
+    color: #26372d;
+    line-height: 1.6;
+}
+
+/* NAVBAR */
+
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 8%;
+    background: white;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: bold;
+    color: #294e3d;
+}
+
+.logo span {
+    color: #86a98c;
+}
+
+nav {
+    display: flex;
+    gap: 30px;
+}
+
+nav a {
+    text-decoration: none;
+    color: #526458;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+nav a:hover {
+    color: #4c805e;
+}
+
+/* HERO SECTION */
+
+.hero {
+    min-height: 480px;
+    padding: 75px 10%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 50px;
+    background: #eaf1e9;
+}
+
+.hero-content {
+    max-width: 550px;
+}
+
+.tagline {
+    color: #668b70;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin-bottom: 15px;
+}
+
+.hero h1 {
+    font-size: 53px;
+    line-height: 1.15;
+    color: #294e3d;
+    margin-bottom: 20px;
+}
+
+.hero h1 span {
+    color: #79a083;
+}
+
+.hero-text {
+    color: #647369;
+    margin-bottom: 30px;
+    max-width: 440px;
+}
+
+.primary-btn {
+    display: inline-block;
+    background: #426c50;
+    color: white;
+    text-decoration: none;
+    padding: 13px 23px;
+    border-radius: 7px;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.primary-btn:hover,
+.submit-btn:hover {
+    background: #31563e;
+}
+
+.hero-card {
+    background: white;
+    padding: 35px;
+    width: 340px;
+    border-radius: 16px;
+    text-align: center;
+    box-shadow: 0 8px 25px rgba(40, 70, 50, 0.07);
+}
+
+.food-icon {
+    font-size: 65px;
+    margin-bottom: 10px;
+}
+
+.hero-card h3 {
+    color: #355c41;
+    margin-bottom: 8px;
+}
+
+.hero-card p {
+    font-size: 14px;
+    color: #78847b;
+}
+
+.hero-stats {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 30px;
+    border-top: 1px solid #e8eee8;
+    padding-top: 20px;
+}
+
+.hero-stats div {
+    display: flex;
+    flex-direction: column;
+}
+
+.hero-stats strong {
+    color: #426c50;
+    font-size: 19px;
+}
+
+.hero-stats small {
+    color: #879187;
+    font-size: 11px;
+}
+
+/* FEATURES */
+
+.features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 25px;
+    padding: 55px 10%;
+    background: white;
+}
+
+.feature {
+    text-align: center;
+    padding: 20px;
+}
+
+.feature span {
+    font-size: 32px;
+}
+
+.feature h3 {
+    margin: 12px 0 7px;
+    color: #355c41;
+}
+
+.feature p {
+    font-size: 13px;
+    color: #78847b;
+}
+
+/* PLANNER */
+
+.planner {
+    padding: 75px 10%;
+}
+
+.section-heading {
+    text-align: center;
+    margin-bottom: 35px;
+}
+
+.section-heading h2 {
+    font-size: 32px;
+    color: #294e3d;
+    margin-bottom: 10px;
+}
+
+.section-heading > p:last-child {
+    color: #78847b;
+    font-size: 14px;
+}
+
+.form-card {
+    max-width: 850px;
+    margin: auto;
+    padding: 35px;
+    background: white;
+    border-radius: 14px;
+    box-shadow: 0 5px 25px rgba(40, 70, 50, 0.06);
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 23px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group label {
+    font-size: 13px;
+    font-weight: bold;
+    color: #405748;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #dce5dc;
+    border-radius: 7px;
+    outline: none;
+    background: #fbfcfa;
+    font-size: 14px;
+    color: #344b3a;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: #6d9876;
+    box-shadow: 0 0 0 2px #e7f0e7;
+}
+
+.submit-btn {
+    display: block;
+    width: 100%;
+    margin-top: 30px;
+    padding: 15px;
+    border: none;
+    border-radius: 7px;
+    background: #426c50;
+    color: white;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/* RESULTS */
+
+.results {
+    padding: 60px 10%;
+    background: #edf3ec;
+}
+
+.result-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    max-width: 950px;
+    margin: auto;
+}
+
+.result-card {
+    background: white;
+    border-radius: 12px;
+    padding: 25px 15px;
+    text-align: center;
+}
+
+.result-card p {
+    font-size: 13px;
+    color: #748177;
+}
+
+.result-card h2 {
+    font-size: 32px;
+    color: #426c50;
+    margin: 10px 0;
+}
+
+.result-card small {
+    color: #879187;
+}
+
+.recommendation-card {
+    max-width: 950px;
+    margin: 25px auto 0;
+    padding: 25px;
+    background: white;
+    border-radius: 12px;
+}
+
+.recommendation-card h3 {
+    color: #355c41;
+    margin-bottom: 15px;
+}
+
+.recommendation-card p {
+    margin-bottom: 10px;
+    color: #617166;
+}
+
+.disclaimer {
+    margin-top: 20px;
+    font-size: 12px;
+    color: #89948b !important;
+}
+
+/* FOOTER */
+
+footer {
+    text-align: center;
+    padding: 35px;
+    background: #294e3d;
+    color: white;
+}
+
+footer h3 {
+    letter-spacing: 2px;
+}
+
+footer p {
+    font-size: 13px;
+    margin: 8px 0;
+    color: #d5e2d7;
+}
+
+footer small {
+    color: #b8c9bb;
+    font-size: 11px;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 768px) {
+    .navbar {
+        padding: 18px 5%;
+    }
+
+    nav {
+        gap: 12px;
+    }
+
+    nav a {
+        font-size: 12px;
+    }
+
+    .hero {
+        flex-direction: column;
+        text-align: center;
+        padding: 55px 6%;
+    }
+
+    .hero h1 {
+        font-size: 40px;
+    }
+
+    .hero-card {
+        width: 100%;
+        max-width: 340px;
+    }
+
+    .features {
+        grid-template-columns: 1fr;
+        padding: 35px 7%;
+    }
+
+    .planner {
+        padding: 50px 6%;
+    }
+
+    .form-card {
+        padding: 22px;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .result-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+[hidden] {
+    display: none !important;
+}
