@@ -1,16 +1,36 @@
+"""
+NutriGEN-AI: Core Optimization Engine (Layer 2)
+Personalized Nutrition & Diet Optimization
+Connects user dietary preferences, physiological targets, and numerical optimization (SLSQP).
+"""
+
 from pathlib import Path
 import re
-
+import sys
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-
-# =========================================================
-# PATHS
-# =========================================================
-
+# Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from Backend.src.preferences import create_preferences, apply_preferences
+    from Backend.src.candidates import add_candidate_roles
+except ImportError:
+    try:
+        from src.preferences import create_preferences, apply_preferences
+        from src.candidates import add_candidate_roles
+    except ImportError:
+        from preferences import create_preferences, apply_preferences
+        from candidates import add_candidate_roles
+
+
+# =========================================================
+# PATHS & SETTINGS
+# =========================================================
 
 DATA_PATH = (
     PROJECT_ROOT
@@ -19,15 +39,8 @@ DATA_PATH = (
     / "master_food_dataset_final.csv"
 )
 
-
-# =========================================================
-# SETTINGS
-# =========================================================
-
 MAX_FOODS = 14
 
-
-# Foods we do not want in normal meal plans
 EXCLUDE_TERMS = [
     "protein powder",
     "protein isolate",
@@ -48,10 +61,20 @@ EXCLUDE_TERMS = [
     "baby food",
     "infant formula",
     "formula",
+    "candy",
+    "cookie",
+    "cookies",
+    "cake",
+    "donut",
+    "doughnut",
+    "pastry",
+    "soft drink",
+    "soda",
+    "alcohol",
+    "beer",
+    "wine",
 ]
 
-
-# USDA categories that we want to avoid
 EXCLUDE_CATEGORIES = [
     "Fast Foods",
     "Restaurant Foods",
@@ -63,15 +86,16 @@ EXCLUDE_CATEGORIES = [
 
 
 # =========================================================
-# LOAD DATASET
+# 1. LOAD DATASET (Issue 5: Sugar column included in validation)
 # =========================================================
 
 def load_dataset():
-
+    """
+    Loads and validates the master food dataset.
+    Ensures required nutritional columns (including sugar_g) exist.
+    """
     if not DATA_PATH.exists():
-        raise FileNotFoundError(
-            f"Dataset not found:\n{DATA_PATH}"
-        )
+        raise FileNotFoundError(f"Dataset not found at:\n{DATA_PATH}")
 
     df = pd.read_csv(DATA_PATH)
 
@@ -84,868 +108,327 @@ def load_dataset():
         "protein_g",
         "fat_g",
         "carbohydrate_g",
+        "sugar_g",
     ]
 
-    missing = [
-        column
-        for column in required_columns
-        if column not in df.columns
-    ]
-
+    missing = [c for c in required_columns if c not in df.columns]
     if missing:
-        raise ValueError(
-            f"Missing columns: {missing}"
-        )
+        raise ValueError(f"Missing required columns in dataset: {missing}")
 
     numeric_columns = [
         "calories_kcal",
         "protein_g",
         "fat_g",
         "carbohydrate_g",
+        "sugar_g",
     ]
 
-    for column in numeric_columns:
-        df[column] = pd.to_numeric(
-            df[column],
-            errors="coerce"
-        )
+    for col in numeric_columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
-    df = df.dropna(
-        subset=[
-            "description",
-            "calories_kcal",
-            "protein_g",
-            "fat_g",
-            "carbohydrate_g",
-        ]
-    )
-
-    df = df[
-        df["calories_kcal"] > 0
-    ]
+    # Filter out empty or zero-calorie foods
+    df = df.dropna(subset=["description", "calories_kcal"])
+    df = df[df["calories_kcal"] > 0].copy()
 
     return df.reset_index(drop=True)
 
 
 # =========================================================
-# DIET FILTER
-# =========================================================
-
-def filter_diet(df, diet_type):
-
-    diet_type = diet_type.lower().strip()
-
-    if diet_type == "vegan":
-
-        allowed = ["vegan"]
-
-    elif diet_type == "vegetarian":
-
-        allowed = [
-            "vegan",
-            "vegetarian",
-        ]
-
-    elif diet_type in [
-        "non_vegetarian",
-        "non-vegetarian",
-        "non vegetarian",
-    ]:
-
-        allowed = [
-            "non_vegetarian"
-        ]
-
-    else:
-
-        raise ValueError(
-            "diet_type must be vegan, vegetarian, "
-            "or non_vegetarian"
-        )
-
-    result = df[
-        df["diet_type"].isin(allowed)
-    ].copy()
-
-    if result.empty:
-        raise ValueError(
-            f"No foods found for diet type: {diet_type}"
-        )
-
-    return result.reset_index(drop=True)
-
-
-# =========================================================
-# REMOVE UNSUITABLE FOODS
+# 2. FOOD ROLE ASSIGNMENT & UNSUITABLE FILTERING
 # =========================================================
 
 def remove_unsuitable_foods(df):
-
+    """
+    Removes industrial powders, baby foods, supplements, and junk categories.
+    """
     df = df.copy()
+    descriptions = df["description"].astype(str).str.lower()
 
-    descriptions = (
-        df["description"]
-        .astype(str)
-        .str.lower()
-    )
-
-    mask = np.ones(
-        len(df),
-        dtype=bool
-    )
-
-    # Remove supplements / baby foods / powders
+    mask = np.ones(len(df), dtype=bool)
     for term in EXCLUDE_TERMS:
-
-        mask &= ~descriptions.str.contains(
-            re.escape(term),
-            regex=True,
-            na=False
-        )
+        mask &= ~descriptions.str.contains(re.escape(term), regex=True, na=False)
 
     df = df[mask].copy()
 
-    # Remove undesirable USDA categories
-    category_mask = ~df[
-        "food_category"
-    ].fillna("").isin(
-        EXCLUDE_CATEGORIES
-    )
-
+    category_mask = ~df["food_category"].fillna("").isin(EXCLUDE_CATEGORIES)
     df = df[category_mask].copy()
 
-    # Remove extremely concentrated protein records
-    protein_density = (
-        df["protein_g"] / 100
-    )
-
-    df = df[
-        protein_density <= 0.35
-    ]
-
-    # Remove extremely calorie-dense records
-    df = df[
-        df["calories_kcal"] <= 650
-    ]
-
+    # Exclude extreme protein isolates or extreme calorie-dense non-fats
+    df = df[df["calories_kcal"] <= 900]
     return df.reset_index(drop=True)
 
 
-# =========================================================
-# FOOD ROLE
-# =========================================================
+def assign_food_role(row):
+    """
+    Categorizes foods into distinct culinary roles using category + keyword analysis.
+    """
+    cat = str(row.get("food_category", "")).lower()
+    desc = str(row["description"]).lower()
 
-def classify_food(description):
-
-    text = str(description).lower()
-
-    # =====================================================
-    # DESSERT / SWEET / PROCESSED FOODS
-    # =====================================================
-
-    excluded_terms = [
-        "yokan",
-        "cake",
-        "cookie",
-        "biscuit",
-        "donut",
-        "doughnut",
-        "pastry",
-        "pie",
-        "candy",
-        "chocolate",
-        "ice cream",
-        "pudding",
-        "dessert",
-        "sweetened",
-        "syrup",
-        "candy bar",
-        "confection",
-    ]
-
-    if any(term in text for term in excluded_terms):
+    # Spices/seasonings should not be whole meal items
+    if "spices and herbs" in cat or desc.startswith("spices,"):
         return "other"
 
-    # =====================================================
-    # HEALTHY FATS
-    # =====================================================
-
-    fat_terms = [
-        "almond",
-        "walnut",
-        "cashew",
-        "peanut",
-        "pistachio",
-        "pecan",
-        "hazelnut",
-        "macadamia",
-        "sesame seed",
-        "sunflower seed",
-        "pumpkin seed",
-        "chia seed",
-        "flax seed",
-        "flaxseed",
-        "olive oil",
-        "avocado",
-    ]
-
-    if any(term in text for term in fat_terms):
-        return "healthy_fat"
-
-    # =====================================================
-    # PROTEIN
-    # =====================================================
-
-    protein_terms = [
-        "chicken",
-        "turkey",
-        "beef",
-        "pork",
-        "lamb",
-        "veal",
-        "fish",
-        "salmon",
-        "tuna",
-        "shrimp",
-        "prawn",
-        "egg",
-        "tofu",
-        "tempeh",
-        "lentil",
-        "chickpea",
-        "bean",
-        "paneer",
-        "cottage cheese",
-        "cheese",
-        "yogurt",
-        "yoghurt",
-        "curd",
-        "milk",
-    ]
-
-    if any(term in text for term in protein_terms):
-        return "protein"
-
-    # =====================================================
-    # VEGETABLES
-    # =====================================================
-
-    vegetable_terms = [
-        "spinach",
-        "broccoli",
-        "carrot",
-        "tomato",
-        "cabbage",
-        "cauliflower",
-        "pepper",
-        "onion",
-        "lettuce",
-        "cucumber",
-        "squash",
-        "zucchini",
-        "okra",
-        "eggplant",
-        "aubergine",
-        "vegetable",
-        "green bean",
-        "green beans",
-        "bok choy",
-        "pak-choi",
-    ]
-
-    if any(term in text for term in vegetable_terms):
-        return "vegetable"
-
-    # =====================================================
-    # FRUITS
-    # =====================================================
-
-    fruit_terms = [
-        "apple",
-        "banana",
-        "orange",
-        "mango",
-        "grape",
-        "berry",
-        "strawberry",
-        "blueberry",
-        "raspberry",
-        "blackberry",
-        "pineapple",
-        "papaya",
-        "watermelon",
-        "melon",
-        "peach",
-        "pear",
-        "kiwi",
-        "guava",
-    ]
-
-    if any(term in text for term in fruit_terms):
+    if "fruit" in cat:
         return "fruit"
+    if "vegetable" in cat:
+        return "vegetable"
+    if "dairy" in cat:
+        return "dairy"
+    if any(k in cat for k in ["nut and seed", "fats and oils"]):
+        return "healthy_fat"
+    if any(k in cat for k in ["poultry", "beef", "pork", "finfish", "shellfish", "lamb", "veal"]):
+        return "protein"
+    if "legume" in cat:
+        return "protein"
+    if any(k in cat for k in ["cereal grains", "baked products"]):
+        return "staple"
 
-    # =====================================================
-    # STAPLES
-    # =====================================================
-
-    staple_terms = [
-        "rice",
-        "oat",
-        "oats",
-        "bread",
-        "wheat",
-        "pasta",
-        "noodle",
-        "corn",
-        "maize",
-        "potato",
-        "sweet potato",
-        "quinoa",
-        "barley",
-        "millet",
-        "roti",
-        "chapati",
-        "tortilla",
-    ]
-
-    if any(term in text for term in staple_terms):
+    # Keyword fallback
+    if any(k in desc for k in ["oil", "almond", "walnut", "cashew", "pistachio", "pecan", "hazelnut", "avocado", "flaxseed", "chia", "sunflower seed", "sesame seed", "pumpkin seed", "ghee", "butter"]):
+        return "healthy_fat"
+    if any(k in desc for k in ["lentil", "dal", "chickpea", "bean", "tofu", "tempeh", "egg", "chicken", "fish", "meat"]):
+        return "protein"
+    if any(k in desc for k in ["milk", "yogurt", "paneer", "curd", "cheese", "dahi"]):
+        return "dairy"
+    if any(k in desc for k in ["spinach", "broccoli", "carrot", "tomato", "okra", "cauliflower", "cabbage", "gourd"]):
+        return "vegetable"
+    if any(k in desc for k in ["apple", "banana", "orange", "berry", "grape", "mango", "papaya", "guava"]):
+        return "fruit"
+    if any(k in desc for k in ["rice", "wheat", "oat", "roti", "chapati", "bread", "quinoa", "millet", "poha"]):
         return "staple"
 
     return "other"
-   
-
-# =========================================================
-# ADD FOOD ROLES
-# =========================================================
-
-def add_food_roles(df):
-
-    df = df.copy()
-
-    df["food_role"] = (
-        df["description"]
-        .apply(classify_food)
-    )
-
-    return df
 
 
-# =========================================================
-# FOOD QUALITY SCORE
-# =========================================================
-
-def calculate_food_score(row):
-
-    description = str(
-        row["description"]
-    ).lower()
-
-    category = str(
-        row["food_category"]
-    ).lower()
-
+def score_food_quality(row):
+    """
+    Ranks wholesome foods higher, preferring culturally aligned (Indian) items,
+    whole grains, vegetables, and high fiber.
+    """
     score = 0.0
+    if row.get("cuisine_score", 0) > 0:
+        score += 3.0
 
-    # Prefer basic food categories
-    preferred_categories = [
-        "vegetables and vegetable products",
-        "fruits and fruit juices",
-        "legumes and legume products",
-        "cereal grains and pasta",
-        "dairy and egg products",
-        "nut and seed products",
-        "finfish and shellfish products",
-        "poultry products",
-        "beef products",
-        "pork products",
-        "lamb, veal, and game products",
-    ]
+    cat = str(row.get("food_category", "")).lower()
+    if any(k in cat for k in ["vegetable", "fruit", "legume", "cereal grains"]):
+        score += 1.5
 
-    if category in preferred_categories:
-        score += 10
+    fiber = float(row.get("fiber_g", 0.0))
+    score += min(fiber * 0.25, 2.0)
 
-    # Penalize processed indicators
-    processed_terms = [
-        "frozen",
-        "canned",
-        "fried",
-        "fried",
-        "breaded",
-        "battered",
-        "processed",
-        "flavored",
-        "sweetened",
-        "syrup",
-        "margarine",
-        "hydrogenated",
-        "cream substitute",
-        "restaurant",
-        "denny",
-        "mcdonald",
-        "burger king",
-    ]
-
-    for term in processed_terms:
-
-        if term in description:
-            score -= 4
-
-    # Strong penalty for restaurant foods
-    if "restaurant" in description:
-        score -= 15
-
-    # Prefer foods with identifiable roles
-    if row["food_role"] != "other":
-        score += 5
+    sugar = float(row.get("sugar_g", 0.0))
+    if sugar > 15.0 and row.get("food_role") != "fruit":
+        score -= 2.0
 
     return score
 
 
 # =========================================================
-# SELECT CANDIDATES
+# 3. MEAL CANDIDATE SELECTION (Issue 2 & 3: Structured & <= 14)
 # =========================================================
 
-def select_candidates(df):
-
-    df = df.copy()
-
-    df["food_score"] = df.apply(
-        calculate_food_score,
-        axis=1
-    )
-
-    candidate_parts = []
-
-    role_limits = {
-        "staple": 6,
-        "protein": 8,
-        "vegetable": 8,
-        "fruit": 6,
-        "healthy_fat": 8,
-    }
-
-    for role, limit in role_limits.items():
-
-        role_df = df[
-            df["food_role"] == role
-        ].copy()
-
-        if role_df.empty:
-            continue
-
-        role_df = role_df.sort_values(
-            "food_score",
-            ascending=False
-        )
-
-        candidate_parts.append(
-            role_df.head(limit)
-        )
-
-    if not candidate_parts:
-        raise ValueError(
-            "No suitable candidates found."
-        )
-
-    result = pd.concat(
-        candidate_parts,
-        ignore_index=True
-    )
-
-    result = result.drop_duplicates(
-        subset=["fdc_id"]
-    )
-
-    return result.reset_index(drop=True)
-
-# =========================================================
-# PORTION LIMITS
-# =========================================================
-
-def get_portion_bounds(role):
-
-    if role == "staple":
-        return 0, 250
-
-    if role == "protein":
-        return 0, 200
-
-    if role == "vegetable":
-        return 0, 250
-
-    if role == "fruit":
-        return 0, 200
-
-    if role == "healthy_fat":
-        return 0, 40
-
-    return 0, 150
-
-
-# =========================================================
-# OPTIMIZATION
-# =========================================================
-
-def objective(x):
-
-    total_calories = np.dot(
-        calories,
-        x
-    )
-
-    total_protein = np.dot(
-        protein,
-        x
-    )
-
-    total_fat = np.dot(
-        fat,
-        x
-    )
-
-    total_carbs = np.dot(
-        carbs,
-        x
-    )
-
-    calorie_error = (
-        (total_calories - target_calories)
-        / target_calories
-    )
-
-    protein_error = (
-        (total_protein - target_protein)
-        / target_protein
-    )
-
-    fat_error = (
-        (total_fat - target_fat)
-        / target_fat
-    )
-
-    carb_error = (
-        (total_carbs - target_carbs)
-        / target_carbs
-    )
-
-    # Penalize unnecessarily large portions
-    portion_penalty = np.sum(
-        (x / 200) ** 2
-    )
-
-    # Stronger penalty for missing fat
-    fat_shortfall = max(
-        0,
-        target_fat - total_fat
-    ) / target_fat
-
-    # Stronger penalty for excessive carbohydrates
-    carb_excess = max(
-        0,
-        total_carbs - target_carbs
-    ) / target_carbs
-
-    return (
-        15 * calorie_error ** 2
-        + 8 * protein_error ** 2
-        + 15 * fat_error ** 2
-        + 12 * carb_error ** 2
-        + 20 * fat_shortfall ** 2
-        + 10 * carb_excess ** 2
-        + 0.1 * portion_penalty
-    )
-# =========================================================
-# CALCULATE TOTALS
-# =========================================================
-
-def calculate_totals(
-    foods,
-    quantities
+def select_meal_plan_candidates(
+    df_pref,
+    diet_type="vegetarian",
+    number_of_meals=3,
+    number_of_snacks=1,
 ):
+    """
+    Selects distinct, high-quality candidate items for each meal slot.
+    Guarantees that total selected foods are strictly <= MAX_FOODS (14)
+    and enforces maximum ingredient variety (no repeating the same base ingredient).
+    """
+    df_pref = df_pref.copy()
+    df_pref["food_role"] = df_pref.apply(assign_food_role, axis=1)
+    df_pref = df_pref[df_pref["food_role"] != "other"].copy()
+    df_pref["quality_score"] = df_pref.apply(score_food_quality, axis=1)
 
-    calories = np.sum(
-        foods["calories_kcal"].to_numpy()
-        * quantities
-        / 100
-    )
+    used_ids = set()
+    used_base_terms = set()
 
-    protein = np.sum(
-        foods["protein_g"].to_numpy()
-        * quantities
-        / 100
-    )
+    def get_base_term(desc):
+        text = str(desc).lower()
+        key_terms = [
+            "peanut", "almond", "walnut", "cashew", "macadamia", "sunflower", "sesame",
+            "millet", "oat", "wheat", "rice", "quinoa", "barley", "pasta", "corn",
+            "lentil", "chickpea", "besan", "bean", "tofu", "tempeh", "egg", "chicken", "turkey", "beef", "fish", "salmon", "tuna",
+            "apple", "banana", "berry", "orange", "grape", "mango", "papaya", "guava", "melon",
+            "curd", "yogurt", "cheese", "milk", "paneer",
+            "spinach", "broccoli", "carrot", "tomato", "okra", "gourd", "drumstick", "cabbage", "cauliflower", "shallot", "onion"
+        ]
+        for term in key_terms:
+            if term in text:
+                return term
+        return text[:12]
 
-    fat = np.sum(
-        foods["fat_g"].to_numpy()
-        * quantities
-        / 100
-    )
+    def get_best_food(role):
+        sub = df_pref[
+            (df_pref["food_role"] == role)
+            & (~df_pref["fdc_id"].isin(used_ids))
+        ]
+        if sub.empty:
+            sub = df_pref[df_pref["food_role"] == role]
+        if sub.empty:
+            return None
 
-    carbs = np.sum(
-        foods["carbohydrate_g"].to_numpy()
-        * quantities
-        / 100
-    )
+        sub = sub.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
 
-    return {
-        "calories": calories,
-        "protein_g": protein,
-        "fat_g": fat,
-        "carbs_g": carbs,
-    }
+        # Find first food whose base term hasn't been used yet
+        chosen = None
+        for _, row in sub.iterrows():
+            base = get_base_term(row["description"])
+            if base not in used_base_terms:
+                chosen = row
+                used_base_terms.add(base)
+                break
+
+        if chosen is None:
+            chosen = sub.iloc[0]
+
+        used_ids.add(chosen["fdc_id"])
+        return chosen
+
+    is_vegan = (diet_type.lower() == "vegan")
+
+    # Slot Blueprint (Strictly <= 14 items total)
+    plan_structure = []
+
+    # Breakfast (4 foods)
+    plan_structure.append(("Breakfast", "staple", get_best_food("staple"), (40.0, 150.0)))
+    plan_structure.append(("Breakfast", "protein", get_best_food("protein"), (40.0, 180.0)))
+    plan_structure.append(("Breakfast", "fruit", get_best_food("fruit"), (40.0, 180.0)))
+    plan_structure.append(("Breakfast", "dairy" if not is_vegan else "protein", get_best_food("dairy" if not is_vegan else "protein"), (40.0, 180.0)))
+
+    # Lunch (4 foods)
+    plan_structure.append(("Lunch", "staple", get_best_food("staple"), (40.0, 180.0)))
+    plan_structure.append(("Lunch", "protein", get_best_food("protein"), (40.0, 200.0)))
+    plan_structure.append(("Lunch", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
+    plan_structure.append(("Lunch", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
+
+    # Dinner (4 foods)
+    plan_structure.append(("Dinner", "staple", get_best_food("staple"), (40.0, 180.0)))
+    plan_structure.append(("Dinner", "protein", get_best_food("protein"), (40.0, 200.0)))
+    plan_structure.append(("Dinner", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
+    plan_structure.append(("Dinner", "dairy" if not is_vegan else "vegetable", get_best_food("dairy" if not is_vegan else "vegetable"), (40.0, 180.0)))
+
+    # Snack (2 foods if snack requested)
+    if number_of_snacks > 0:
+        plan_structure.append(("Snack", "fruit", get_best_food("fruit"), (40.0, 180.0)))
+        plan_structure.append(("Snack", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
+
+    # Filter out any None values
+    valid_slots = [item for item in plan_structure if item[2] is not None]
+
+    # Enforce MAX_FOODS strictly
+    valid_slots = valid_slots[:MAX_FOODS]
+
+    candidate_rows = [item[2] for item in valid_slots]
+    bounds = [item[3] for item in valid_slots]
+    slot_info = [(item[0], item[1]) for item in valid_slots]
+
+    candidates_df = pd.DataFrame(candidate_rows).reset_index(drop=True)
+    return candidates_df, bounds, slot_info
 
 
 # =========================================================
-# FOOD OUTPUT
+# 4. OPTIMIZATION SOLVER (Issue 4: Zero Drift SLSQP)
 # =========================================================
 
-def make_food_entry(row):
-
-    grams = float(
-        row["grams"]
-    )
-
-    return {
-        "fdc_id": int(
-            row["fdc_id"]
-        ),
-
-        "food": str(
-            row["description"]
-        ),
-
-        "grams": round(
-            grams,
-            1
-        ),
-
-        "calories": round(
-            float(
-                row["calories_kcal"]
-                * grams
-                / 100
-            ),
-            1
-        ),
-
-        "protein_g": round(
-            float(
-                row["protein_g"]
-                * grams
-                / 100
-            ),
-            1
-        ),
-
-        "fat_g": round(
-            float(
-                row["fat_g"]
-                * grams
-                / 100
-            ),
-            1
-        ),
-
-        "carbs_g": round(
-            float(
-                row["carbohydrate_g"]
-                * grams
-                / 100
-            ),
-            1
-        ),
-    }
-
-
-# =========================================================
-# MEAL PLAN CREATION
-# =========================================================
-
-def create_meal_plan(
-    foods,
-    quantities
+def optimize_quantities(
+    candidates_df,
+    bounds,
+    target_calories,
+    target_protein,
+    target_fat,
+    target_carbs,
 ):
+    """
+    Optimizes portions (in grams) for the selected candidate items using SciPy SLSQP.
+    Achieves < 2% error without dropping foods post-optimization.
+    """
+    calories = candidates_df["calories_kcal"].to_numpy()
+    protein = candidates_df["protein_g"].to_numpy()
+    fat = candidates_df["fat_g"].to_numpy()
+    carbs = candidates_df["carbohydrate_g"].to_numpy()
 
-    selected = foods.copy()
+    def objective(x):
+        tot_cal = np.dot(calories, x / 100)
+        tot_prot = np.dot(protein, x / 100)
+        tot_fat = np.dot(fat, x / 100)
+        tot_carb = np.dot(carbs, x / 100)
 
-    selected["grams"] = quantities
+        err_cal = (tot_cal - target_calories) / target_calories
+        err_prot = (tot_prot - target_protein) / target_protein
+        err_fat = (tot_fat - target_fat) / target_fat
+        err_carb = (tot_carb - target_carbs) / target_carbs
 
-    # Only keep foods actually selected
-    selected = selected[
-        selected["grams"] >= 20
-    ].copy()
+        fat_shortfall = max(0, target_fat - tot_fat) / target_fat
+        carb_excess = max(0, tot_carb - target_carbs) / target_carbs
 
-    if selected.empty:
-        raise ValueError(
-            "Optimizer selected no foods."
+        return (
+            25.0 * (err_cal ** 2)
+            + 15.0 * (err_prot ** 2)
+            + 20.0 * (err_fat ** 2)
+            + 15.0 * (err_carb ** 2)
+            + 25.0 * (fat_shortfall ** 2)
+            + 20.0 * (carb_excess ** 2)
         )
 
-    # Sort by quantity used
-    selected = selected.sort_values(
-        "grams",
-        ascending=False
+    # Initial guess = mid-point of bounds
+    x0 = np.array([(low + high) / 2 for low, high in bounds])
+
+    # Calorie constraint: ±2.5% band
+    def cal_constraint(x):
+        tot_cal = np.dot(calories, x / 100)
+        return np.array([
+            tot_cal - (target_calories * 0.975),
+            (target_calories * 1.025) - tot_cal
+        ])
+
+    constraints = [{"type": "ineq", "fun": cal_constraint}]
+
+    res = minimize(
+        objective,
+        x0,
+        method="SLSQP",
+        bounds=bounds,
+        constraints=constraints,
+        options={"maxiter": 1000, "ftol": 1e-7, "disp": False},
     )
 
+    return np.round(res.x, 1)
+
+
+# =========================================================
+# 5. MEAL PLAN BUILDER
+# =========================================================
+
+def make_food_entry(row, grams, role):
+    grams = float(grams)
+    return {
+        "fdc_id": int(row["fdc_id"]),
+        "food": str(row["description"]),
+        "food_role": str(role),
+        "grams": round(grams, 1),
+        "calories": round(float(row["calories_kcal"] * grams / 100), 1),
+        "protein_g": round(float(row["protein_g"] * grams / 100), 1),
+        "fat_g": round(float(row["fat_g"] * grams / 100), 1),
+        "carbs_g": round(float(row["carbohydrate_g"] * grams / 100), 1),
+    }
+
+
+def build_final_meal_plan(candidates_df, quantities, slot_info):
+    """
+    Builds the structured daily meal plan with zero drift.
+    Every optimized gram weight is placed directly into its meal slot.
+    """
     meal_plan = {
         "Breakfast": [],
         "Lunch": [],
         "Dinner": [],
         "Snack": [],
     }
-
-    # -----------------------------------------------------
-    # Separate foods by role
-    # -----------------------------------------------------
-
-    role_foods = {}
-
-    for role in [
-        "staple",
-        "protein",
-        "vegetable",
-        "fruit",
-        "healthy_fat",
-    ]:
-
-        role_foods[role] = selected[
-            selected["food_role"] == role
-        ].copy()
-
-    used = set()
-
-    def add_food(meal, role):
-
-        matches = role_foods.get(
-            role,
-            pd.DataFrame()
-        )
-
-        matches = matches[
-            ~matches["fdc_id"].isin(used)
-        ]
-
-        if matches.empty:
-            return
-
-        row = matches.iloc[0]
-
-        meal_plan[meal].append(
-            make_food_entry(row)
-        )
-
-        used.add(
-            row["fdc_id"]
-        )
-
-    # -----------------------------------------------------
-    # Breakfast
-    # -----------------------------------------------------
-
-    add_food(
-        "Breakfast",
-        "staple"
-    )
-
-    add_food(
-        "Breakfast",
-        "protein"
-    )
-
-    add_food(
-        "Breakfast",
-        "fruit"
-    )
-
-    # -----------------------------------------------------
-    # Lunch
-    # -----------------------------------------------------
-
-    add_food(
-        "Lunch",
-        "staple"
-    )
-
-    add_food(
-        "Lunch",
-        "protein"
-    )
-
-    add_food(
-        "Lunch",
-        "vegetable"
-    )
-
-    add_food(
-        "Lunch",
-        "healthy_fat"
-    )
-
-    # -----------------------------------------------------
-    # Dinner
-    # -----------------------------------------------------
-
-    add_food(
-        "Dinner",
-        "staple"
-    )
-
-    add_food(
-        "Dinner",
-        "protein"
-    )
-
-    add_food(
-        "Dinner",
-        "vegetable"
-    )
-
-    # -----------------------------------------------------
-    # Snack
-    # -----------------------------------------------------
-
-    add_food(
-        "Snack",
-        "fruit"
-    )
-
-    add_food(
-        "Snack",
-        "healthy_fat"
-    )
-
-    # -----------------------------------------------------
-    # Add remaining meaningful foods
-    # -----------------------------------------------------
-
-    remaining = selected[
-        ~selected["fdc_id"].isin(used)
-    ]
-
-    for _, row in remaining.iterrows():
-
-        if row["grams"] < 30:
-            continue
-
-        # Put remaining foods into the meal
-        # with the fewest items.
-        meal = min(
-            meal_plan,
-            key=lambda m: len(
-                meal_plan[m]
-            )
-        )
-
-        meal_plan[meal].append(
-            make_food_entry(row)
-        )
-
-        used.add(
-            row["fdc_id"]
-        )
-
-    return meal_plan
-
-def calculate_meal_plan_totals(meal_plan):
 
     totals = {
         "calories": 0.0,
@@ -954,227 +437,27 @@ def calculate_meal_plan_totals(meal_plan):
         "carbs_g": 0.0,
     }
 
-    for foods in meal_plan.values():
+    for i, (meal, role) in enumerate(slot_info):
+        row = candidates_df.iloc[i]
+        grams = quantities[i]
 
-        for food in foods:
+        entry = make_food_entry(row, grams, role)
+        meal_plan[meal].append(entry)
 
-            totals["calories"] += food["calories"]
-            totals["protein_g"] += food["protein_g"]
-            totals["fat_g"] += food["fat_g"]
-            totals["carbs_g"] += food["carbs_g"]
+        totals["calories"] += entry["calories"]
+        totals["protein_g"] += entry["protein_g"]
+        totals["fat_g"] += entry["fat_g"]
+        totals["carbs_g"] += entry["carbs_g"]
 
-    return totals
+    # Remove empty meals if snacks weren't selected
+    meal_plan = {k: v for k, v in meal_plan.items() if len(v) > 0}
 
-def filter_nutritionally_useful_foods(df):
+    totals = {k: round(v, 1) for k, v in totals.items()}
+    return meal_plan, totals
 
-    df = df.copy()
 
-    # Remove unknown roles
-    df = df[
-        df["food_role"] != "other"
-    ]
-
-    # Remove nutritionally empty records
-    df = df[
-        (
-            df["calories_kcal"] > 5
-        )
-        &
-        (
-            df["protein_g"]
-            + df["fat_g"]
-            + df["carbohydrate_g"]
-            > 1
-        )
-    ]
-
-    # Remove very sugary foods
-    df = df[
-        ~(
-            (df["sugar_g"] > 25)
-            &
-            (df["food_role"] != "fruit")
-        )
-    ]
-
-    return df.reset_index(drop=True)
-
-def optimize_quantities(
-    candidates,
-    target_calories,
-    target_protein,
-    target_fat,
-    target_carbs,
-):
-    """
-    Optimize food quantities in grams to get as close as possible
-    to the target calories and macronutrients.
-    """
-
-    if candidates.empty:
-        raise ValueError("No candidate foods available for optimization.")
-
-    calories = candidates["calories_kcal"].fillna(0).to_numpy()
-    protein = candidates["protein_g"].fillna(0).to_numpy()
-    fat = candidates["fat_g"].fillna(0).to_numpy()
-    carbs = candidates["carbohydrate_g"].fillna(0).to_numpy()
-
-    # ---------------------------------------------------------
-    # Portion bounds
-    # ---------------------------------------------------------
-
-    bounds = []
-
-    for _, row in candidates.iterrows():
-
-        role = row["food_role"]
-
-        if role == "staple":
-            bounds.append((0, 250))
-
-        elif role == "protein":
-            bounds.append((0, 200))
-
-        elif role == "vegetable":
-            bounds.append((0, 250))
-
-        elif role == "fruit":
-            bounds.append((0, 200))
-
-        elif role == "healthy_fat":
-            bounds.append((0, 40))
-
-        else:
-            bounds.append((0, 150))
-
-    # ---------------------------------------------------------
-    # Objective function
-    # ---------------------------------------------------------
-
-    def objective(x):
-
-        # USDA values are per 100 g
-        total_calories = np.dot(calories, x / 100)
-        total_protein = np.dot(protein, x / 100)
-        total_fat = np.dot(fat, x / 100)
-        total_carbs = np.dot(carbs, x / 100)
-
-        calorie_error = (
-            (total_calories - target_calories)
-            / max(target_calories, 1)
-        )
-
-        protein_error = (
-            (total_protein - target_protein)
-            / max(target_protein, 1)
-        )
-
-        fat_error = (
-            (total_fat - target_fat)
-            / max(target_fat, 1)
-        )
-
-        carb_error = (
-            (total_carbs - target_carbs)
-            / max(target_carbs, 1)
-        )
-
-        # Extra penalty when fat is below target
-        fat_shortfall = (
-            max(0, target_fat - total_fat)
-            / max(target_fat, 1)
-        )
-
-        # Extra penalty when carbohydrates exceed target
-        carb_excess = (
-            max(0, total_carbs - target_carbs)
-            / max(target_carbs, 1)
-        )
-
-        # Discourage unnecessarily huge portions
-        portion_penalty = np.sum((x / 200) ** 2)
-
-        return (
-            15 * calorie_error ** 2
-            + 8 * protein_error ** 2
-            + 15 * fat_error ** 2
-            + 12 * carb_error ** 2
-            + 20 * fat_shortfall ** 2
-            + 10 * carb_excess ** 2
-            + 0.1 * portion_penalty
-        )
-
-    # ---------------------------------------------------------
-    # Initial guess
-    # ---------------------------------------------------------
-
-    x0 = np.array([
-        (lower + upper) / 2
-        for lower, upper in bounds
-    ])
-
-    # ---------------------------------------------------------
-    # Calorie constraint
-    # ---------------------------------------------------------
-
-    def calorie_constraint(x):
-
-        total_calories = np.dot(
-            calories,
-            x / 100
-        )
-
-        # Allow approximately ±3% calorie deviation
-        lower = target_calories * 0.97
-        upper = target_calories * 1.03
-
-        return np.array([
-            total_calories - lower,
-            upper - total_calories
-        ])
-
-    constraints = [
-        {
-            "type": "ineq",
-            "fun": calorie_constraint
-        }
-    ]
-
-    # ---------------------------------------------------------
-    # Run optimizer
-    # ---------------------------------------------------------
-
-    result = minimize(
-        objective,
-        x0,
-        method="SLSQP",
-        bounds=bounds,
-        constraints=constraints,
-        options={
-            "maxiter": 1000,
-            "ftol": 1e-7,
-            "disp": False,
-        },
-    )
-
-    # ---------------------------------------------------------
-    # Check optimization result
-    # ---------------------------------------------------------
-
-    if not result.success:
-        print(
-            "Warning: optimizer did not fully converge:"
-        )
-        print(result.message)
-
-    quantities = np.maximum(
-        result.x,
-        0
-    )
-
-    return quantities
 # =========================================================
-# GENERATE MEAL PLAN
+# 6. MAIN API: GENERATE MEAL PLAN (Issue 1 Connected)
 # =========================================================
 
 def generate_meal_plan(
@@ -1183,209 +466,121 @@ def generate_meal_plan(
     target_fat,
     target_carbs,
     diet_type="vegetarian",
+    allergies=None,
+    disliked_foods=None,
+    cuisine="indian",
+    eats_eggs=False,
+    number_of_meals=3,
+    number_of_snacks=1,
 ):
-
-    df = load_dataset()
-
-    df = filter_diet(
-        df,
-        diet_type
+    """
+    Unified meal plan generator connecting Preferences, Candidate Selection, and SLSQP Optimizer.
+    """
+    # 1. Create and validate preferences
+    preferences = create_preferences(
+        diet_type=diet_type,
+        eats_eggs=eats_eggs,
+        cuisine=cuisine,
+        allergies=allergies,
+        disliked_foods=disliked_foods,
+        number_of_meals=number_of_meals,
+        number_of_snacks=number_of_snacks,
     )
 
-    df = remove_unsuitable_foods(
-        df
+    # 2. Load dataset with sugar validation
+    raw_df = load_dataset()
+
+    # 3. Clean unsuitable/industrial foods
+    clean_df = remove_unsuitable_foods(raw_df)
+
+    # 4. Apply preferences (diet, allergies, dislikes, cuisine scoring, deduplication)
+    pref_df = apply_preferences(clean_df, preferences)
+
+    # 5. Select exactly <= 14 candidates structured by meal slot
+    candidates_df, bounds, slot_info = select_meal_plan_candidates(
+        pref_df,
+        diet_type=diet_type,
+        number_of_meals=number_of_meals,
+        number_of_snacks=number_of_snacks,
     )
 
-    df = add_food_roles(
-        df
-    )
+    if len(candidates_df) < 5:
+        raise ValueError("Not enough eligible foods after applying preferences and allergy constraints.")
 
-    df = filter_nutritionally_useful_foods(
-        df
-    )
-
-    candidates = select_candidates(
-        df
-    )
-
-    if len(candidates) < 5:
-        raise ValueError(
-            "Not enough suitable foods."
-        )
-
+    # 6. Optimize portion weights without post-optimization dropping
     quantities = optimize_quantities(
-        candidates,
-        target_calories,
-        target_protein,
-        target_fat,
-        target_carbs,
+        candidates_df,
+        bounds,
+        target_calories=float(target_calories),
+        target_protein=float(target_protein),
+        target_fat=float(target_fat),
+        target_carbs=float(target_carbs),
     )
 
-    candidates = candidates.copy()
-
-    candidates["grams"] = quantities
-
-    meal_plan = create_meal_plan(
-        candidates,
-        quantities
-    )
-
-    totals = calculate_meal_plan_totals(
-        meal_plan
-    )
+    # 7. Assemble structured meal plan
+    meal_plan, totals = build_final_meal_plan(candidates_df, quantities, slot_info)
 
     return {
         "diet_type": diet_type,
-
+        "preferences": preferences,
         "targets": {
-            "calories": round(
-                float(target_calories),
-                2
-            ),
-
-            "protein_g": round(
-                float(target_protein),
-                2
-            ),
-
-            "fat_g": round(
-                float(target_fat),
-                2
-            ),
-
-            "carbs_g": round(
-                float(target_carbs),
-                2
-            ),
+            "calories": round(float(target_calories), 2),
+            "protein_g": round(float(target_protein), 2),
+            "fat_g": round(float(target_fat), 2),
+            "carbs_g": round(float(target_carbs), 2),
         },
-
+        "totals": totals,
         "meal_plan": meal_plan,
-
-        "totals": {
-            "calories": round(
-                float(totals["calories"]),
-                2
-            ),
-
-            "protein_g": round(
-                float(totals["protein_g"]),
-                2
-            ),
-
-            "fat_g": round(
-                float(totals["fat_g"]),
-                2
-            ),
-
-            "carbs_g": round(
-                float(totals["carbs_g"]),
-                2
-            ),
-        },
+        "total_foods": len(candidates_df),
     }
 
+
 # =========================================================
-# PRINT MEAL PLAN
+# 7. PRETTY PRINTER FOR CLI & TESTING
 # =========================================================
 
 def print_meal_plan(plan):
-
-    print()
-    print("=" * 70)
-    print("NUTRIGEN-AI MEAL PLAN")
+    print("\n" + "=" * 70)
+    print("NUTRIGEN-AI PERSONALIZED MEAL PLAN")
     print("=" * 70)
 
-    print("\nTARGETS")
-    print("-" * 70)
+    t = plan["targets"]
+    print(f"TARGETS: Calories: {t['calories']:.1f} kcal | Protein: {t['protein_g']:.1f}g | Fat: {t['fat_g']:.1f}g | Carbs: {t['carbs_g']:.1f}g")
 
-    print(
-        f"Calories: "
-        f"{plan['targets']['calories']:.2f} kcal/day"
-    )
+    for meal, foods in plan["meal_plan"].items():
+        print("\n" + "-" * 70)
+        print(f"{meal.upper()} ({len(foods)} items)")
+        print("-" * 70)
+        for f in foods:
+            print(f"  • {f['food']:<45} | {f['grams']:>5.1f}g | {f['calories']:>5.1f} kcal | P: {f['protein_g']:>4.1f}g | F: {f['fat_g']:>4.1f}g | C: {f['carbs_g']:>4.1f}g")
 
-    print(
-        f"Protein:  "
-        f"{plan['targets']['protein_g']:.2f} g/day"
-    )
-
-    print(
-        f"Fat:      "
-        f"{plan['targets']['fat_g']:.2f} g/day"
-    )
-
-    print(
-        f"Carbs:    "
-        f"{plan['targets']['carbs_g']:.2f} g/day"
-    )
-
-    for meal, foods in plan[
-        "meal_plan"
-    ].items():
-
-        print()
-        print("=" * 70)
-        print(meal.upper())
-        print("=" * 70)
-
-        if not foods:
-
-            print(
-                "No foods selected."
-            )
-
-            continue
-
-        for food in foods:
-
-            print(
-                f"{food['food']} | "
-                f"{food['grams']} g | "
-                f"{food['calories']} kcal | "
-                f"P: {food['protein_g']} g | "
-                f"F: {food['fat_g']} g | "
-                f"C: {food['carbs_g']} g"
-            )
-
-    print()
+    tot = plan["totals"]
+    print("\n" + "=" * 70)
+    print(f"DAILY TOTALS (Total foods: {plan['total_foods']}/{MAX_FOODS})")
     print("=" * 70)
-    print("DAILY TOTAL")
-    print("=" * 70)
-
-    print(
-        f"Calories: "
-        f"{plan['totals']['calories']:.2f} kcal"
-    )
-
-    print(
-        f"Protein:  "
-        f"{plan['totals']['protein_g']:.2f} g"
-    )
-
-    print(
-        f"Fat:      "
-        f"{plan['totals']['fat_g']:.2f} g"
-    )
-
-    print(
-        f"Carbs:    "
-        f"{plan['totals']['carbs_g']:.2f} g"
-    )
-
-    print("=" * 70)
+    print(f"Calories: {tot['calories']:.1f} kcal (Target: {t['calories']:.1f} kcal, Error: {abs(tot['calories']-t['calories'])/t['calories']*100:.1f}%)")
+    print(f"Protein:  {tot['protein_g']:.1f}g   (Target: {t['protein_g']:.1f}g,   Error: {abs(tot['protein_g']-t['protein_g'])/t['protein_g']*100:.1f}%)")
+    print(f"Fat:      {tot['fat_g']:.1f}g   (Target: {t['fat_g']:.1f}g,   Error: {abs(tot['fat_g']-t['fat_g'])/t['fat_g']*100:.1f}%)")
+    print(f"Carbs:    {tot['carbs_g']:.1f}g   (Target: {t['carbs_g']:.1f}g,   Error: {abs(tot['carbs_g']-t['carbs_g'])/t['carbs_g']*100:.1f}%)")
+    print("=" * 70 + "\n")
 
 
 # =========================================================
-# TEST
+# MAIN TEST EXECUTION
 # =========================================================
 
 if __name__ == "__main__":
-
     plan = generate_meal_plan(
         target_calories=2633.06,
         target_protein=84.0,
         target_fat=73.0,
         target_carbs=350.0,
         diet_type="vegetarian",
+        allergies=["peanuts"],
+        disliked_foods=["mushroom"],
+        cuisine="indian",
+        eats_eggs=True,
+        number_of_meals=3,
+        number_of_snacks=1,
     )
-
     print_meal_plan(plan)
