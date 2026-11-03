@@ -135,3 +135,4 @@ def nutrition_requirements_endpoint(request: NutritionRequest):
             status_code=500,
             detail="An error occurred while calculating nutrition requirements."
         ) from exc
+    
