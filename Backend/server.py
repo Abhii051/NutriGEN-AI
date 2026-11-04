@@ -137,9 +137,15 @@ def generate_plan_endpoint(request: PlanGenerationRequest):
         ) from exc
 
 
-# Alias for backwards compatibility with earlier integration branch tests
+# Aliases for backwards compatibility
 @app.post("/api/meal-plan/generate")
 def generate_meal_plan_alias(request: PlanGenerationRequest):
+    return generate_plan_endpoint(request)
+
+
+@app.post("/generate-meal-plan")
+def generate_meal_plan_root_alias(request: PlanGenerationRequest):
+    """Root-level alias used by earlier frontend script versions."""
     return generate_plan_endpoint(request)
 
 
@@ -174,22 +180,13 @@ def nutrition_requirements_endpoint(request: PlanGenerationRequest):
 # FRONTEND STATIC FILES & SPA SERVING
 # =====================================================================
 
-FRONTEND_DIR = PROJECT_ROOT / "Frontend"
-
-@app.get("/")
-def serve_frontend_root():
-    index_path = FRONTEND_DIR / "index.html"
-    if index_path.exists():
-        from fastapi.responses import FileResponse
-        return FileResponse(index_path)
-    return {
-        "status": "online",
-        "service": "NutriGEN-AI API",
-        "docs": "/docs"
-    }
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+if not FRONTEND_DIR.exists():
+    FRONTEND_DIR = PROJECT_ROOT / "Frontend"
 
 if FRONTEND_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+    # Mount static files at root so /index.html, /style.css, /script.js are all served
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 
 
 if __name__ == "__main__":

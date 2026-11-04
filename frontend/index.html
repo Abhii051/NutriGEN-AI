@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NutriGEN-AI | Smart Nutrition</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+<div class="app">
+
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-icon">N</div>
+            <div>
+                <h2>NutriGEN<span>-AI</span></h2>
+                <small>SMART NUTRITION</small>
+            </div>
+        </div>
+
+        <div class="nav-label">WORKSPACE</div>
+
+        <nav>
+            <a class="nav-item active" href="#dashboard">
+                <span>⌂</span> Dashboard
+            </a>
+            <a class="nav-item" href="#profile">
+                <span>◉</span> My Profile
+            </a>
+            <a class="nav-item" href="#meal-section">
+                <span>▤</span> Meal Planner
+            </a>
+        </nav>
+
+        <div class="sidebar-bottom">
+            <div class="sidebar-note">
+                <div class="note-icon">✦</div>
+                <h4>Eat better. Live better.</h4>
+                <p>Personalised nutrition powered by intelligent food data.</p>
+            </div>
+            <p class="version">NUTRIGEN-AI · 1.0</p>
+        </div>
+    </aside>
+
+
+    <main class="main-content" id="dashboard">
+
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">YOUR PERSONAL NUTRITION SPACE</p>
+                <h1>Good nutrition starts here.</h1>
+            </div>
+
+            <div class="top-right">
+                <span class="status-dot"></span>
+                <span>System ready</span>
+                <div class="avatar">N</div>
+            </div>
+        </header>
+
+
+        <section class="welcome-card">
+            <div class="welcome-content">
+                <span class="welcome-tag">✦ PERSONALIZED NUTRITION</span>
+                <h2>Build a healthier you,<br>one meal at a time.</h2>
+                <p>
+                    Discover meal recommendations tailored to your body,
+                    dietary preferences and fitness goals.
+                </p>
+                <a href="#profile" class="primary-link">Create your meal plan →</a>
+            </div>
+            <div class="welcome-art">
+                <div class="art-circle">
+                    <span>🥗</span>
+                </div>
+                <div class="art-caption">NOURISH YOUR BODY</div>
+            </div>
+        </section>
+
+
+        <section class="stats-grid">
+
+            <div class="stat-card">
+                <div class="stat-top">
+                    <span>BODY MASS INDEX</span>
+                    <span class="stat-icon">◉</span>
+                </div>
+                <h2 id="bmiValue">--</h2>
+                <p id="bmiStatus">Enter your details to calculate</p>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-top">
+                    <span>DAILY CALORIES</span>
+                    <span class="stat-icon">◈</span>
+                </div>
+                <h2 id="calorieValue">-- <small>kcal</small></h2>
+                <p>Estimated daily energy requirement</p>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-top">
+                    <span>YOUR GOAL</span>
+                    <span class="stat-icon">◎</span>
+                </div>
+                <h2 id="goalValue">Not set</h2>
+                <p>Your nutrition journey starts here</p>
+            </div>
+
+        </section>
+
+
+        <section class="content-grid">
+
+            <div class="form-panel" id="profile">
+
+                <div class="section-heading">
+                    <div>
+                        <span class="section-tag">STEP 01</span>
+                        <h2>Your health profile</h2>
+                        <p>Tell us a little about yourself.</p>
+                    </div>
+                    <span class="heading-symbol">✧</span>
+                </div>
+
+                <form id="nutritionForm">
+
+                    <div class="form-grid">
+
+                        <div class="field">
+                            <label for="name">Full name</label>
+                            <input type="text" id="name" placeholder="Enter your name" required>
+                        </div>
+
+                        <div class="field">
+                            <label for="age">Age</label>
+                            <input type="number" id="age" placeholder="e.g. 22" min="15" max="100" required>
+                        </div>
+
+                        <div class="field">
+                            <label for="gender">Gender</label>
+                            <select id="gender" required>
+                                <option value="">Select gender</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="weight">Weight (kg)</label>
+                            <input type="number" id="weight" placeholder="e.g. 65" min="1" step="0.1" required>
+                        </div>
+
+                        <div class="field">
+                            <label for="height">Height (cm)</label>
+                            <input type="number" id="height" placeholder="e.g. 170" min="50" max="250" required>
+                        </div>
+
+                        <div class="field">
+                            <label for="activity">Activity level</label>
+                            <select id="activity" required>
+                                <option value="">Select activity</option>
+                                <option value="sedentary">Sedentary</option>
+                                <option value="light">Lightly active</option>
+                                <option value="moderate">Moderately active</option>
+                                <option value="active">Very active</option>
+                                <option value="very_active">Extremely active</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="goal">Fitness goal</label>
+                            <select id="goal" required>
+                                <option value="">Choose your goal</option>
+                                <option value="weight_loss">Weight loss</option>
+                                <option value="weight_gain">Weight gain</option>
+                                <option value="maintenance">Weight maintenance</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="diet">Dietary preference</label>
+                            <select id="diet" required>
+                                <option value="">Select preference</option>
+                                <option value="vegetarian">Vegetarian</option>
+                                <option value="non_vegetarian">Non-vegetarian</option>
+                                <option value="vegan">Vegan</option>
+                                <option value="eggetarian">Eggetarian</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="cuisine">Cuisine preference</label>
+                            <select id="cuisine">
+                                <option value="indian">Indian</option>
+                                <option value="mediterranean">Mediterranean</option>
+                                <option value="continental">Continental</option>
+                                <option value="asian">Asian</option>
+                                <option value="any">Any cuisine</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="meals">Meals per day</label>
+                            <select id="meals" required>
+                                <option value="3">3 meals (no snack)</option>
+                                <option value="4" selected>4 meals (+ 1 snack)</option>
+                                <option value="5">5 meals (+ 2 snacks)</option>
+                            </select>
+                        </div>
+
+                        <div class="field full-width">
+                            <label for="allergies">Food allergies / restrictions</label>
+                            <input type="text" id="allergies" placeholder="e.g. Peanuts, lactose (or leave blank)">
+                        </div>
+
+                        <div class="field full-width">
+                            <label for="user_prompt">AI Chef instructions (optional)</label>
+                            <input type="text" id="user_prompt" placeholder="e.g. Quick 15-minute meals, spicy, no oven">
+                        </div>
+
+                    </div>
+
+                    <button type="submit" class="generate-btn" id="generateBtn">
+                        Generate My Meal Plan <span>→</span>
+                    </button>
+
+                    <p class="form-footnote">
+                        ✦ Your information is used to personalise nutrition recommendations.
+                    </p>
+
+                </form>
+            </div>
+
+
+            <div class="side-panel">
+
+                <div class="info-card">
+                    <span class="section-tag">HOW IT WORKS</span>
+                    <h2>Your nutrition journey</h2>
+
+                    <div class="steps">
+
+                        <div class="step">
+                            <div class="step-number">01</div>
+                            <div>
+                                <h4>Personalise</h4>
+                                <p>Provide your health and dietary information.</p>
+                            </div>
+                        </div>
+
+                        <div class="step">
+                            <div class="step-number">02</div>
+                            <div>
+                                <h4>Analyse</h4>
+                                <p>Evaluate your nutritional requirements.</p>
+                            </div>
+                        </div>
+
+                        <div class="step">
+                            <div class="step-number">03</div>
+                            <div>
+                                <h4>Recommend</h4>
+                                <p>Generate a meal plan suited to your goals.</p>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="tip-card">
+                    <span>✦ DAILY REMINDER</span>
+                    <h3>Small choices create big changes.</h3>
+                    <p>Consistency is the foundation of a healthier lifestyle.</p>
+                    <div class="tip-decoration">❋</div>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <section class="meal-section" id="meal-section">
+
+            <div class="section-heading">
+                <div>
+                    <span class="section-tag">STEP 02</span>
+                    <h2>Your personalised meal plan</h2>
+                    <p>Your recommended meals will appear here.</p>
+                </div>
+            </div>
+
+            <div id="mealResults" class="meal-results">
+                <div class="empty-state">
+                    <div class="empty-icon">🥑</div>
+                    <h3>Your meal plan awaits</h3>
+                    <p>Complete your health profile and generate your personalised recommendations.</p>
+                </div>
+            </div>
+
+        </section>
+
+
+        <footer>
+            <span>© 2026 NutriGEN-AI</span>
+            <span>Intelligent Nutrition · Better Living</span>
+        </footer>
+
+    </main>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
