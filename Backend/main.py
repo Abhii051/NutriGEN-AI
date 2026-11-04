@@ -10,13 +10,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 MODEL_DIR = PROJECT_ROOT / "src"
 NUTRITION_DIR = PROJECT_ROOT / "nutrition" / "src"
+BACKEND_SRC_DIR = Path(__file__).resolve().parent / "src"
 
 sys.path.insert(0, str(MODEL_DIR))
 sys.path.insert(0, str(NUTRITION_DIR))
-
+sys.path.insert(0, str(BACKEND_SRC_DIR))
 
 from calculator import calculate_nutrition
 from requirements import get_nutrition_requirements
+from optimizer import generate_meal_plan
 
 
 app = FastAPI(
@@ -50,7 +52,23 @@ class NutritionRequest(BaseModel):
         "weight_gain"
     ]
 
+class MealPlanRequest(NutritionRequest):
 
+    diet_type: Literal[
+        "vegetarian",
+        "vegan",
+        "non-vegetarian"
+    ] = "vegetarian"
+
+    eats_eggs: bool = False
+
+    cuisine: str = "indian"
+
+    allergies: list[str] = Field(default_factory=list)
+
+    disliked_foods: list[str] = Field(default_factory=list)
+
+    number_of_snacks: Literal[0, 1] = 1
 
 #Home endpoint
 
@@ -109,6 +127,8 @@ def calculate_nutrition_endpoint(request: NutritionRequest):
 @app.post("/api/nutrition/requirements")
 def nutrition_requirements_endpoint(request: NutritionRequest):
 
+
+
     try:
         requirements = get_nutrition_requirements(
             age=request.age,
@@ -134,5 +154,70 @@ def nutrition_requirements_endpoint(request: NutritionRequest):
         raise HTTPException(
             status_code=500,
             detail="An error occurred while calculating nutrition requirements."
+        ) from exc
+
+# ============================================================
+# MEAL PLAN GENERATION ENDPOINT
+# ============================================================
+
+@app.post("/api/meal-plan/generate")
+def generate_meal_plan_endpoint(request: MealPlanRequest):
+
+    try:
+
+        # 1. Calculate nutrition requirements
+
+        requirements = get_nutrition_requirements(
+            age=request.age,
+            weight_kg=request.weight_kg,
+            height_cm=request.height_cm,
+            sex=request.sex,
+            activity_level=request.activity_level,
+            goal=request.goal
+        )
+
+        # 2. Send nutrition targets to optimizer
+
+        meal_plan = generate_meal_plan(
+            target_calories=requirements["calories"],
+            target_protein=requirements["protein_g"],
+            target_fat=requirements["fat_g"],
+            target_carbs=requirements["carbs_g"],
+            diet_type=request.diet_type,
+            eats_eggs=request.eats_eggs,
+            cuisine=request.cuisine,
+            allergies=request.allergies,
+            disliked_foods=request.disliked_foods,
+            number_of_meals=3,
+            number_of_snacks=request.number_of_snacks
+        )
+
+        # 3. Return results
+
+        return {
+            "status": "success",
+            "nutrition_requirements": requirements,
+            "meal_plan": meal_plan
+        }
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc)
+        ) from exc
+
+    except FileNotFoundError as exc:
+
+        raise HTTPException(
+            status_code=500,
+            detail="Required food dataset was not found."
+        ) from exc
+
+    except Exception as exc:
+
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while generating the meal plan."
         ) from exc
     
