@@ -73,6 +73,12 @@ EXCLUDE_TERMS = [
     "alcohol",
     "beer",
     "wine",
+    "kanpyo",
+    "groundcherries",
+    "flour, wheat",
+    "flour, whole wheat, unenriched",
+    "millet, raw",
+    "cereals ready-to-eat, quaker",
 ]
 
 EXCLUDE_CATEGORIES = [
@@ -203,14 +209,23 @@ def assign_food_role(row):
 
 def score_food_quality(row):
     """
-    Ranks wholesome foods higher, preferring culturally aligned (Indian) items,
-    whole grains, vegetables, and high fiber.
+    Ranks wholesome foods higher, prioritizing curated authentic everyday foods,
+    culturally aligned items, vegetables, and fiber.
     """
     score = 0.0
-    if row.get("cuisine_score", 0) > 0:
-        score += 3.0
+    
+    # Massive priority for curated authentic everyday dishes
+    source = str(row.get("source_dataset", "")).lower()
+    if source == "everyday_foods_curated":
+        score += 20.0
+
+    cuisine_sc = float(row.get("cuisine_score", 0.0))
+    if cuisine_sc > 0:
+        score += cuisine_sc * 2.0
 
     cat = str(row.get("food_category", "")).lower()
+    desc = str(row.get("description", "")).lower()
+
     if any(k in cat for k in ["vegetable", "fruit", "legume", "cereal grains"]):
         score += 1.5
 
@@ -250,12 +265,13 @@ def select_meal_plan_candidates(
     def get_base_term(desc):
         text = str(desc).lower()
         key_terms = [
-            "peanut", "almond", "walnut", "cashew", "macadamia", "sunflower", "sesame",
-            "millet", "oat", "wheat", "rice", "quinoa", "barley", "pasta", "corn",
-            "lentil", "chickpea", "besan", "bean", "tofu", "tempeh", "egg", "chicken", "turkey", "beef", "fish", "salmon", "tuna",
-            "apple", "banana", "berry", "orange", "grape", "mango", "papaya", "guava", "melon",
-            "curd", "yogurt", "cheese", "milk", "paneer",
-            "spinach", "broccoli", "carrot", "tomato", "okra", "gourd", "drumstick", "cabbage", "cauliflower", "shallot", "onion"
+            "poha", "upma", "idli", "dosa", "cheela", "chapati", "roti", "paratha", "naan", "pita", "khichdi",
+            "basmati", "steamed rice", "brown rice", "soba", "udon", "oatmeal", "sweet potato", "toast",
+            "dal tadka", "rajma", "chana masala", "hummus", "falafel", "miso", "edamame", "tofu", "yakitori",
+            "paneer bhurji", "palak paneer", "chicken curry", "egg curry", "souvlaki", "salmon", "yakitori",
+            "bhindi", "okra", "aloo gobi", "lauki", "greek salad", "tzatziki", "bok choy", "broccoli",
+            "curd", "dahi", "greek yogurt", "makhana", "ghee", "olive oil", "sesame oil", "feta",
+            "peanut", "almond", "walnut", "cashew", "banana", "apple", "papaya", "nori", "scrambled egg"
         ]
         for term in key_terms:
             if term in text:

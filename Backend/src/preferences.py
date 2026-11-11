@@ -25,7 +25,7 @@ def create_preferences(
     if disliked_foods is None:
         disliked_foods = []
 
-    diet_type = diet_type.lower().strip()
+    diet_type = str(diet_type).lower().strip().replace("_", "-")
     cuisine = cuisine.lower().strip()
 
     valid_diets = [
@@ -389,101 +389,65 @@ def apply_disliked_food_filter(df, preferences):
 
 
 # =========================================================
-# INDIAN FOOD PRIORITY
+# MULTI-CUISINE SCORING & EVERYDAY FOOD PRIORITY
 # =========================================================
 
 def calculate_cuisine_score(df, preferences):
     """
-    Give Indian foods a higher preference score.
-
-    This does NOT remove non-Indian foods.
+    Scores foods based on the selected cuisine (Indian, Mediterranean, Japanese, Western).
+    Curated everyday authentic foods receive top priority scores.
     """
-
     df = df.copy()
-
-    cuisine = preferences["cuisine"]
-
+    cuisine = str(preferences.get("cuisine", "indian")).lower().strip()
     df["cuisine_score"] = 0
 
-    if cuisine != "indian":
-        return df
+    CUISINE_TERMS = {
+        "indian": [
+            "poha", "upma", "idli", "dosa", "cheela", "chapati", "roti", "paratha", "naan",
+            "basmati", "rice", "khichdi", "dal", "lentil", "chana", "chickpea", "rajma", "moong",
+            "urad", "toor", "paneer", "curd", "dahi", "ghee", "makhana", "bhindi", "okra",
+            "palak", "spinach", "gourd", "lauki", "aloo", "cauliflower", "gobi"
+        ],
+        "mediterranean": [
+            "hummus", "tahini", "pita", "falafel", "feta", "tzatziki", "olive oil", "olive",
+            "salmon", "souvlaki", "lentil soup", "fakes", "couscous", "quinoa", "chickpea",
+            "greek salad", "greek yogurt", "cucumber", "tomato", "zucchini", "shakshuka"
+        ],
+        "japanese": [
+            "miso", "tofu", "wakame", "seaweed", "nori", "edamame", "teriyaki", "salmon",
+            "yakitori", "tamagoyaki", "soba", "udon", "short-grain rice", "sushi rice",
+            "bok choy", "shiitake", "sesame oil", "sesame seed"
+        ],
+        "western": [
+            "oatmeal", "oats", "scrambled egg", "boiled egg", "chicken breast", "salmon",
+            "sweet potato", "broccoli", "toast", "whole wheat bread", "peanut butter",
+            "banana", "apple", "greek yogurt", "cottage cheese", "green beans"
+        ]
+    }
 
-    indian_food_terms = [
-        # Staples
-        "basmati",
-        "rice",
-        "atta",
-        "wheat",
-        "roti",
-        "chapati",
-        "millet",
-        "ragi",
-        "jowar",
-        "bajra",
+    terms = CUISINE_TERMS.get(cuisine, CUISINE_TERMS["indian"])
 
-        # Pulses / legumes
-        "dal",
-        "lentil",
-        "chickpea",
-        "chana",
-        "rajma",
-        "kidney bean",
-        "mung",
-        "moong",
-        "urad",
-        "toor",
-        "pigeon pea",
+    def score_row(row):
+        score = 0
+        desc = str(row.get("description", "")).lower()
+        source = str(row.get("source_dataset", "")).lower()
+        food_cuisine = str(row.get("cuisine", "")).lower()
 
-        # Indian vegetables / foods
-        "okra",
-        "bhindi",
-        "brinjal",
-        "eggplant",
-        "baingan",
-        "gourd",
-        "bottle gourd",
-        "bitter gourd",
-        "ridge gourd",
-        "drumstick",
+        # Highest priority: curated everyday food matching this cuisine
+        if source == "everyday_foods_curated":
+            if food_cuisine == cuisine:
+                return 20
+            elif food_cuisine in ["indian", "mediterranean", "japanese", "western"] and food_cuisine != cuisine:
+                return -10
+            return 5
 
-        # Dairy / protein
-        "paneer",
-        "curd",
-        "dahi",
+        # Keyword matching for standard USDA catalog items
+        if contains_food_term(desc, terms):
+            score += 4
 
-        # Spices
-        "turmeric",
-        "cumin",
-        "jeera",
-        "coriander",
-        "cardamom",
-        "clove",
-        "ginger",
-        "garlic",
+        return score
 
-        # Common Indian foods
-        "poha",
-        "upma",
-        "idli",
-        "dosa",
-        "sambar",
-    ]
-
-    df["cuisine_score"] = (
-        df["description"]
-        .fillna("")
-        .astype(str)
-        .str.lower()
-        .apply(
-            lambda text: 1
-            if contains_food_term(
-                text,
-                indian_food_terms
-            )
-            else 0
-        )
-    )
-
+    df["cuisine_score"] = df.apply(score_row, axis=1)
     return df
 
 def deduplicate_candidates(df):
