@@ -10,11 +10,24 @@ import re
 import json
 import logging
 from typing import Dict, Any, List, Optional
-import httpx
-from dotenv import load_dotenv
-
-# Load environment variables from .env file if present
-load_dotenv()
+try:
+    import httpx
+except ImportError:
+    httpx = None
+import requests
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # Pure Python fallback to load .env without python-dotenv
+    _env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+    if os.path.exists(_env_file):
+        with open(_env_file, 'r', encoding='utf-8') as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith('#') and '=' in _line:
+                    _k, _v = _line.split('=', 1)
+                    os.environ.setdefault(_k.strip(), _v.strip().strip('"\''))
 
 logger = logging.getLogger("nutrigen.recipe_llm")
 
@@ -124,8 +137,11 @@ def generate_recipe_with_groq(
         }
 
         try:
-            with httpx.Client(timeout=10.0) as client:
-                response = client.post(url, headers=headers, json=payload)
+            if httpx is not None:
+                with httpx.Client(timeout=10.0) as client:
+                    response = client.post(url, headers=headers, json=payload)
+            else:
+                response = requests.post(url, headers=headers, json=payload, timeout=10.0)
                 if response.status_code == 200:
                     data = response.json()
                     content = data["choices"][0]["message"]["content"]
