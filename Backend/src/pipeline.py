@@ -101,6 +101,9 @@ def run_nutrigen_pipeline(user_data: Dict[str, Any]) -> Dict[str, Any]:
     user_prompt = str(user_data.get("user_prompt", "")).strip()
     groq_api_key = user_data.get("groq_api_key") or os.getenv("GROQ_API_KEY")
 
+    raw_target_weight = user_data.get("target_weight_kg")
+    target_weight_kg = float(raw_target_weight) if raw_target_weight not in [None, "", 0] else None
+
     # 2. Compute Biometrics & Nutritional Targets (Layer 1 Pratheek)
     profile = generate_nutrition_profile(
         age=age,
@@ -149,10 +152,53 @@ def run_nutrigen_pipeline(user_data: Dict[str, Any]) -> Dict[str, Any]:
     # Attach recipes into the meal_plan object
     plan["recipes"] = recipes
 
-    # 5. Build Final Response Payload
+    # 5. Calculate Clinical Biometrics & Target Projections
+    bmi = round(weight_kg / ((height_cm / 100.0) ** 2), 1)
+    if bmi < 18.5:
+        bmi_category = "Underweight"
+    elif bmi < 25.0:
+        bmi_category = "Normal weight"
+    elif bmi < 30.0:
+        bmi_category = "Overweight"
+    else:
+        bmi_category = "Obese"
+
+    cal_target = profile["calorie_target"]
+    tdee_val = profile["tdee"]
+    daily_delta = round(cal_target - tdee_val, 0)
+    water_intake_l = round(weight_kg * 0.035, 1)
+
+    weight_delta_kg = None
+    weekly_rate_kg = None
+    estimated_weeks = None
+
+    if target_weight_kg is not None:
+        weight_delta_kg = round(target_weight_kg - weight_kg, 1)
+        weekly_rate_kg = round(abs(daily_delta) * 7.0 / 7700.0, 2) if daily_delta != 0 else 0.0
+        if weekly_rate_kg > 0 and weight_delta_kg != 0:
+            estimated_weeks = round(abs(weight_delta_kg) / weekly_rate_kg, 1)
+        elif weight_delta_kg == 0:
+            estimated_weeks = 0.0
+
+    biometrics = {
+        "bmr": round(profile["bmr"], 1),
+        "tdee": round(profile["tdee"], 1),
+        "bmi": bmi,
+        "bmi_category": bmi_category,
+        "current_weight_kg": weight_kg,
+        "target_weight_kg": target_weight_kg,
+        "weight_delta_kg": weight_delta_kg,
+        "daily_calorie_delta": daily_delta,
+        "weekly_rate_kg": weekly_rate_kg,
+        "estimated_weeks": estimated_weeks,
+        "water_intake_liters": water_intake_l
+    }
+
+    # 6. Build Final Response Payload
     return {
         "status": "success",
         "llm_engine": f"Groq {PRIMARY_GROQ_MODEL}",
+        "biometrics": biometrics,
         "nutrition_requirements": {
             "bmr": profile["bmr"],
             "tdee": profile["tdee"],

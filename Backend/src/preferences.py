@@ -406,22 +406,23 @@ def calculate_cuisine_score(df, preferences):
             "poha", "upma", "idli", "dosa", "cheela", "chapati", "roti", "paratha", "naan",
             "basmati", "rice", "khichdi", "dal", "lentil", "chana", "chickpea", "rajma", "moong",
             "urad", "toor", "paneer", "curd", "dahi", "ghee", "makhana", "bhindi", "okra",
-            "palak", "spinach", "gourd", "lauki", "aloo", "cauliflower", "gobi"
+            "palak", "spinach", "gourd", "lauki", "aloo", "cauliflower", "gobi", "chicken",
+            "egg", "bhurji", "omelette", "tikka", "tandoori", "biryani", "mutton", "fish", "curry"
         ],
         "mediterranean": [
             "hummus", "tahini", "pita", "falafel", "feta", "tzatziki", "olive oil", "olive",
             "salmon", "souvlaki", "lentil soup", "fakes", "couscous", "quinoa", "chickpea",
-            "greek salad", "greek yogurt", "cucumber", "tomato", "zucchini", "shakshuka"
+            "greek salad", "greek yogurt", "cucumber", "tomato", "zucchini", "shakshuka", "tuna", "chicken"
         ],
         "japanese": [
             "miso", "tofu", "wakame", "seaweed", "nori", "edamame", "teriyaki", "salmon",
             "yakitori", "tamagoyaki", "soba", "udon", "short-grain rice", "sushi rice",
-            "bok choy", "shiitake", "sesame oil", "sesame seed"
+            "bok choy", "shiitake", "sesame oil", "sesame seed", "chicken", "egg"
         ],
         "western": [
-            "oatmeal", "oats", "scrambled egg", "boiled egg", "chicken breast", "salmon",
-            "sweet potato", "broccoli", "toast", "whole wheat bread", "peanut butter",
-            "banana", "apple", "greek yogurt", "cottage cheese", "green beans"
+            "oatmeal", "oats", "scrambled egg", "boiled egg", "chicken breast", "chicken", "salmon",
+            "turkey", "sweet potato", "broccoli", "toast", "whole wheat bread", "peanut butter",
+            "banana", "apple", "greek yogurt", "cottage cheese", "green beans", "tuna"
         ]
     }
 

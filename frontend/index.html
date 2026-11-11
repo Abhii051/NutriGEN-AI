@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NutriGEN-AI | Smart Nutrition</title>
-    <link rel="stylesheet" href="style.css">
+    <title>NutriGEN-AI | Clinical Nutrition & AI-Optimized Meal Planner</title>
+    <link rel="stylesheet" href="style.css?v=2.1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
@@ -13,6 +13,7 @@
 
 <div class="app">
 
+    <!-- SIDEBAR NAVIGATION -->
     <aside class="sidebar">
         <div class="brand">
             <div class="brand-icon">N</div>
@@ -34,95 +35,175 @@
             <a class="nav-item" href="#meal-section">
                 <span>▤</span> Meal Planner
             </a>
+            <button type="button" class="nav-item nav-btn" id="historyNavBtn">
+                <span>📜</span> Previous Plans
+                <span id="historyBadge" class="nav-badge">0</span>
+            </button>
         </nav>
+
+        <div class="nav-label" style="margin-top: 25px;">QUICK UTILITIES</div>
+        <div class="sidebar-quick-links">
+            <button type="button" class="sidebar-link-btn" id="sidebarGroceryBtn">
+                <span>🛒</span> Grocery List
+            </button>
+            <button type="button" class="sidebar-link-btn" id="sidebarPrintBtn">
+                <span>🖨️</span> Print / Export PDF
+            </button>
+        </div>
 
         <div class="sidebar-bottom">
             <div class="sidebar-note">
                 <div class="note-icon">✦</div>
-                <h4>Eat better. Live better.</h4>
-                <p>Personalised nutrition powered by intelligent food data.</p>
+                <h4>SciPy SLSQP + AI Chef</h4>
+                <p>Constrained mathematical optimization paired with Groq Llama 3.1 8B recipe craft.</p>
             </div>
-            <p class="version">NUTRIGEN-AI · 1.0</p>
+            <p class="version">NUTRIGEN-AI · v2.0 CLINICAL</p>
         </div>
     </aside>
 
 
+    <!-- MAIN CONTENT AREA -->
     <main class="main-content" id="dashboard">
 
+        <!-- TOPBAR -->
         <header class="topbar">
             <div>
-                <p class="eyebrow">YOUR PERSONAL NUTRITION SPACE</p>
+                <p class="eyebrow">CLINICAL BIOMETRICS & MATHEMATICAL OPTIMIZATION</p>
                 <h1>Good nutrition starts here.</h1>
             </div>
 
             <div class="top-right">
-                <span class="status-dot"></span>
-                <span>System ready</span>
-                <div class="avatar">N</div>
+                <button type="button" class="btn-topbar-secondary" id="demoBtn" title="Fill with realistic demo profile for rapid evaluation">
+                    <span>⚡</span> Auto-Fill Demo
+                </button>
+                <button type="button" class="btn-topbar-primary" id="openHistoryBtn">
+                    <span>📜</span> Saved Plans (<span id="topbarHistoryCount">0</span>)
+                </button>
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>System ready</span>
+                </div>
+                <div class="avatar" title="NutriGEN-AI User">N</div>
             </div>
         </header>
 
 
+        <!-- WELCOME HERO CARD -->
         <section class="welcome-card">
             <div class="welcome-content">
-                <span class="welcome-tag">✦ PERSONALIZED NUTRITION</span>
+                <span class="welcome-tag">✦ EVIDENCE-BASED NUTRITION</span>
                 <h2>Build a healthier you,<br>one meal at a time.</h2>
                 <p>
-                    Discover meal recommendations tailored to your body,
-                    dietary preferences and fitness goals.
+                    Harness clinical biometric science (Mifflin-St Jeor), quadratic numerical optimization (<2.5% caloric variance), and AI Chef recipes crafted to your culture and taste.
                 </p>
-                <a href="#profile" class="primary-link">Create your meal plan →</a>
+                <div class="hero-actions">
+                    <a href="#profile" class="primary-link">Configure Health Profile ↓</a>
+                    <button type="button" class="secondary-link" id="heroHistoryBtn">View Past Plans →</button>
+                </div>
             </div>
             <div class="welcome-art">
                 <div class="art-circle">
                     <span>🥗</span>
                 </div>
-                <div class="art-caption">NOURISH YOUR BODY</div>
+                <div class="art-caption">CLINICALLY OPTIMIZED</div>
             </div>
         </section>
 
 
-        <section class="stats-grid">
-
-            <div class="stat-card">
-                <div class="stat-top">
-                    <span>BODY MASS INDEX</span>
-                    <span class="stat-icon">◉</span>
-                </div>
-                <h2 id="bmiValue">--</h2>
-                <p id="bmiStatus">Enter your details to calculate</p>
+        <!-- CLINICAL BIOMETRICS & TARGET WEIGHT DASHBOARD GRID (6 CARDS) -->
+        <section class="stats-section">
+            <div class="section-subheading">
+                <span>REAL-TIME BIOMETRIC CALCULATIONS</span>
+                <small class="live-pill">● LIVE ESTIMATES</small>
             </div>
 
-            <div class="stat-card">
-                <div class="stat-top">
-                    <span>DAILY CALORIES</span>
-                    <span class="stat-icon">◈</span>
-                </div>
-                <h2 id="calorieValue">-- <small>kcal</small></h2>
-                <p>Estimated daily energy requirement</p>
-            </div>
+            <div class="stats-grid">
 
-            <div class="stat-card">
-                <div class="stat-top">
-                    <span>YOUR GOAL</span>
-                    <span class="stat-icon">◎</span>
+                <!-- 1. BMI CARD -->
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <span>BODY MASS INDEX</span>
+                        <span class="stat-icon">◉</span>
+                    </div>
+                    <h2 id="bmiValue">--</h2>
+                    <p>
+                        <span id="bmiStatus" class="stat-pill neutral">Enter details</span>
+                    </p>
+                    <span class="stat-subtext">Healthy standard: 18.5 – 24.9</span>
                 </div>
-                <h2 id="goalValue">Not set</h2>
-                <p>Your nutrition journey starts here</p>
-            </div>
 
+                <!-- 2. BMR CARD -->
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <span>BASAL METABOLIC RATE (BMR)</span>
+                        <span class="stat-icon">🔥</span>
+                    </div>
+                    <h2 id="bmrValue">-- <small>kcal</small></h2>
+                    <p class="stat-highlight">Resting daily burn</p>
+                    <span class="stat-subtext">Mifflin-St Jeor clinical baseline</span>
+                </div>
+
+                <!-- 3. TDEE CARD -->
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <span>TOTAL DAILY ENERGY (TDEE)</span>
+                        <span class="stat-icon">⚡</span>
+                    </div>
+                    <h2 id="tdeeValue">-- <small>kcal</small></h2>
+                    <p class="stat-highlight">Maintenance requirement</p>
+                    <span class="stat-subtext">Accounts for lifestyle & activity</span>
+                </div>
+
+                <!-- 4. DAILY CALORIE TARGET -->
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <span>CALORIE TARGET</span>
+                        <span class="stat-icon">◈</span>
+                    </div>
+                    <h2 id="calorieValue">-- <small>kcal</small></h2>
+                    <p>
+                        <span id="calorieDeltaBadge" class="stat-pill neutral">Maintenance</span>
+                    </p>
+                    <span class="stat-subtext">Calibrated for your specific goal</span>
+                </div>
+
+                <!-- 5. TARGET WEIGHT & TIMELINE -->
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <span>GOAL WEIGHT & TIMELINE</span>
+                        <span class="stat-icon">🎯</span>
+                    </div>
+                    <h2 id="targetWeightDisplay">-- <small>kg</small></h2>
+                    <p id="targetWeightTimeline" class="stat-highlight">Set target weight</p>
+                    <span id="targetWeightPace" class="stat-subtext">Safe pace: 0.4 – 0.7 kg/week</span>
+                </div>
+
+                <!-- 6. CLINICAL HYDRATION -->
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <span>DAILY HYDRATION GOAL</span>
+                        <span class="stat-icon">💧</span>
+                    </div>
+                    <h2 id="waterValue">-- <small>L/day</small></h2>
+                    <p id="waterGlasses" class="stat-highlight">~8 - 10 glasses</p>
+                    <span class="stat-subtext">Recommended 35 ml per kg body weight</span>
+                </div>
+
+            </div>
         </section>
 
 
+        <!-- CONTENT GRID: FORM + SIDE PANELS -->
         <section class="content-grid">
 
+            <!-- HEALTH PROFILE FORM -->
             <div class="form-panel" id="profile">
 
                 <div class="section-heading">
                     <div>
                         <span class="section-tag">STEP 01</span>
-                        <h2>Your health profile</h2>
-                        <p>Tell us a little about yourself.</p>
+                        <h2>Your Health Profile & Preferences</h2>
+                        <p>Complete your physiological details for mathematical optimization.</p>
                     </div>
                     <span class="heading-symbol">✧</span>
                 </div>
@@ -145,31 +226,36 @@
                             <label for="gender">Gender</label>
                             <select id="gender" required>
                                 <option value="">Select gender</option>
-                                <option value="male">Male</option>
+                                <option value="male" selected>Male</option>
                                 <option value="female">Female</option>
                                 <option value="other">Other</option>
                             </select>
                         </div>
 
                         <div class="field">
-                            <label for="weight">Weight (kg)</label>
-                            <input type="number" id="weight" placeholder="e.g. 65" min="1" step="0.1" required>
+                            <label for="weight">Current weight (kg)</label>
+                            <input type="number" id="weight" placeholder="e.g. 75" min="20" max="300" step="0.1" required>
+                        </div>
+
+                        <div class="field">
+                            <label for="target_weight">Target weight (kg) <span class="optional-tag">Optional</span></label>
+                            <input type="number" id="target_weight" placeholder="e.g. 70 (your goal)" min="20" max="300" step="0.1">
                         </div>
 
                         <div class="field">
                             <label for="height">Height (cm)</label>
-                            <input type="number" id="height" placeholder="e.g. 170" min="50" max="250" required>
+                            <input type="number" id="height" placeholder="e.g. 175" min="50" max="250" required>
                         </div>
 
                         <div class="field">
                             <label for="activity">Activity level</label>
                             <select id="activity" required>
                                 <option value="">Select activity</option>
-                                <option value="sedentary">Sedentary</option>
-                                <option value="light">Lightly active</option>
-                                <option value="moderate">Moderately active</option>
-                                <option value="active">Very active</option>
-                                <option value="very_active">Extremely active</option>
+                                <option value="sedentary">Sedentary (desk job, minimal movement)</option>
+                                <option value="light">Lightly active (light exercise 1-3 days/wk)</option>
+                                <option value="moderate" selected>Moderately active (moderate exercise 3-5 days/wk)</option>
+                                <option value="active">Very active (hard exercise 6-7 days/wk)</option>
+                                <option value="very_active">Extremely active (athlete / physical job)</option>
                             </select>
                         </div>
 
@@ -177,9 +263,9 @@
                             <label for="goal">Fitness goal</label>
                             <select id="goal" required>
                                 <option value="">Choose your goal</option>
-                                <option value="weight_loss">Weight loss</option>
-                                <option value="weight_gain">Weight gain</option>
-                                <option value="maintenance">Weight maintenance</option>
+                                <option value="weight_loss">Weight loss (-300 to -500 kcal/day)</option>
+                                <option value="maintenance" selected>Weight maintenance (balanced TDEE)</option>
+                                <option value="weight_gain">Weight / Muscle gain (+300 to +500 kcal/day)</option>
                             </select>
                         </div>
 
@@ -187,86 +273,87 @@
                             <label for="diet">Dietary preference</label>
                             <select id="diet" required>
                                 <option value="">Select preference</option>
-                                <option value="vegetarian">Vegetarian</option>
-                                <option value="non_vegetarian">Non-vegetarian</option>
-                                <option value="vegan">Vegan</option>
-                                <option value="eggetarian">Eggetarian</option>
+                                <option value="vegetarian" selected>Vegetarian (Dairy allowed, no meat)</option>
+                                <option value="non_vegetarian">Non-vegetarian (Meat, poultry, fish)</option>
+                                <option value="vegan">Vegan (100% plant-based)</option>
+                                <option value="eggetarian">Eggetarian (Vegetarian + Eggs)</option>
                             </select>
                         </div>
 
                         <div class="field">
                             <label for="cuisine">Cuisine preference</label>
                             <select id="cuisine">
-                                <option value="indian">Indian</option>
-                                <option value="mediterranean">Mediterranean</option>
-                                <option value="continental">Continental</option>
-                                <option value="asian">Asian</option>
-                                <option value="any">Any cuisine</option>
+                                <option value="indian" selected>🇮🇳 Indian (Chapati, Dal, Poha, Khichdi, Paneer)</option>
+                                <option value="mediterranean">🫒 Mediterranean (Pita, Hummus, Souvlaki, Olive Oil)</option>
+                                <option value="japanese">🍱 Japanese (Miso, Steamed Rice, Tofu, Teriyaki)</option>
+                                <option value="western">🥗 Western / Continental (Oats, Chicken Breast, Salmon)</option>
+                                <option value="any">🌍 Any cuisine (global selection)</option>
                             </select>
                         </div>
 
                         <div class="field">
-                            <label for="meals">Meals per day</label>
+                            <label for="meals">Meal frequency</label>
                             <select id="meals" required>
-                                <option value="3">3 meals (no snack)</option>
-                                <option value="4" selected>4 meals (+ 1 snack)</option>
-                                <option value="5">5 meals (+ 2 snacks)</option>
+                                <option value="3">3 meals (Breakfast, Lunch, Dinner)</option>
+                                <option value="4" selected>4 meals (3 meals + 1 healthy snack)</option>
+                                <option value="5">5 meals (3 meals + 2 snacks)</option>
                             </select>
                         </div>
 
                         <div class="field full-width">
-                            <label for="allergies">Food allergies / restrictions</label>
-                            <input type="text" id="allergies" placeholder="e.g. Peanuts, lactose (or leave blank)">
+                            <label for="allergies">Food allergies / intolerances <span class="optional-tag">Optional</span></label>
+                            <input type="text" id="allergies" placeholder="e.g. Peanuts, lactose, shellfish (or leave blank)">
                         </div>
 
                         <div class="field full-width">
-                            <label for="user_prompt">AI Chef instructions (optional)</label>
-                            <input type="text" id="user_prompt" placeholder="e.g. Quick 15-minute meals, spicy, no oven">
+                            <label for="user_prompt">AI Chef instructions <span class="optional-tag">Optional</span></label>
+                            <input type="text" id="user_prompt" placeholder="e.g. Quick 15-minute meals, high-fiber, spicy, no oven needed">
                         </div>
 
                     </div>
 
                     <button type="submit" class="generate-btn" id="generateBtn">
-                        Generate My Meal Plan <span>→</span>
+                        Generate Clinically Optimized Meal Plan <span>→</span>
                     </button>
 
                     <p class="form-footnote">
-                        ✦ Your information is used to personalise nutrition recommendations.
+                        ✦ NutriGEN-AI uses verified nutritional bounds and bounded quadratic programming (SciPy SLSQP).
                     </p>
 
                 </form>
             </div>
 
 
+            <!-- SIDE INFO PANELS -->
             <div class="side-panel">
 
                 <div class="info-card">
-                    <span class="section-tag">HOW IT WORKS</span>
-                    <h2>Your nutrition journey</h2>
+                    <span class="section-tag">ENGINE ARCHITECTURE</span>
+                    <h2>How NutriGEN-AI Works</h2>
 
                     <div class="steps">
 
                         <div class="step">
                             <div class="step-number">01</div>
                             <div>
-                                <h4>Personalise</h4>
-                                <p>Provide your health and dietary information.</p>
+                                <h4>Biometric Synthesis</h4>
+                                <p>Mifflin-St Jeor BMR equation + activity multiplier to determine exact metabolic expenditure.</p>
                             </div>
                         </div>
 
                         <div class="step">
                             <div class="step-number">02</div>
                             <div>
-                                <h4>Analyse</h4>
-                                <p>Evaluate your nutritional requirements.</p>
+                                <h4>SciPy SLSQP Optimization</h4>
+                                <p>Constrained quadratic solver selects everyday foods with bounded portions, achieving <2.5% macro variance in <80ms.</p>
                             </div>
                         </div>
 
                         <div class="step">
                             <div class="step-number">03</div>
                             <div>
-                                <h4>Recommend</h4>
-                                <p>Generate a meal plan suited to your goals.</p>
+                                <h4>Groq Llama 3.1 AI Chef</h4>
+                                <p>Translates optimized nutritional items into authentic, practical kitchen recipes with cooking times and chef notes.</p>
                             </div>
                         </div>
 
@@ -274,10 +361,21 @@
                 </div>
 
                 <div class="tip-card">
-                    <span>✦ DAILY REMINDER</span>
-                    <h3>Small choices create big changes.</h3>
-                    <p>Consistency is the foundation of a healthier lifestyle.</p>
-                    <div class="tip-decoration">❋</div>
+                    <span>✦ CLINICAL ACCURACY</span>
+                    <h3>Zero Hallucinated Numbers.</h3>
+                    <p>Unlike standard ChatGPT diet prompts that make up fake numbers, NutriGEN-AI proves macro totals mathematically before you cook.</p>
+                    <div class="tip-decoration">⚖️</div>
+                </div>
+
+                <!-- PREVIOUS PLANS PREVIEW BOX -->
+                <div class="history-preview-card" id="historyPreviewCard">
+                    <div class="hp-header">
+                        <h4>📜 Recent Saved Plans</h4>
+                        <button type="button" class="hp-view-all" id="historyPreviewViewAll">View All →</button>
+                    </div>
+                    <div id="historyPreviewList" class="hp-list">
+                        <p class="empty-history-text">No plans generated yet. Complete the form to create and save your first plan!</p>
+                    </div>
                 </div>
 
             </div>
@@ -285,13 +383,14 @@
         </section>
 
 
+        <!-- MEAL PLAN SECTION -->
         <section class="meal-section" id="meal-section">
 
             <div class="section-heading">
                 <div>
                     <span class="section-tag">STEP 02</span>
-                    <h2>Your personalised meal plan</h2>
-                    <p>Your recommended meals will appear here.</p>
+                    <h2>Your Clinically Optimized Meal Plan</h2>
+                    <p>Review your meal breakdown, culinary instructions, and nutrient distribution.</p>
                 </div>
             </div>
 
@@ -299,22 +398,82 @@
                 <div class="empty-state">
                     <div class="empty-icon">🥑</div>
                     <h3>Your meal plan awaits</h3>
-                    <p>Complete your health profile and generate your personalised recommendations.</p>
+                    <p>Enter your details above and click <strong>Generate Clinically Optimized Meal Plan</strong> to start.</p>
                 </div>
             </div>
 
         </section>
 
 
+        <!-- FOOTER -->
         <footer>
-            <span>© 2026 NutriGEN-AI</span>
-            <span>Intelligent Nutrition · Better Living</span>
+            <span>© 2026 NutriGEN-AI · Powered by SciPy SLSQP & Groq Meta Llama 3.1 8B</span>
+            <span>Clinical Nutrition · Deterministic Optimization · Better Living</span>
         </footer>
 
     </main>
 
 </div>
 
-<script src="script.js"></script>
+
+<!-- ===================================================================== -->
+<!-- SLIDE-OVER DRAWER: PREVIOUS PLANS HISTORY                             -->
+<!-- ===================================================================== -->
+<div id="historyDrawerBackdrop" class="drawer-backdrop"></div>
+<aside id="historyDrawer" class="history-drawer" aria-hidden="true">
+    <div class="drawer-header">
+        <div>
+            <span class="section-tag">SAVED WORKSPACE</span>
+            <h3>📜 Previous Meal Plans</h3>
+            <p>Reload any past meal plan instantly with all recipes and biometrics.</p>
+        </div>
+        <button type="button" class="drawer-close-btn" id="historyDrawerCloseBtn" aria-label="Close History">✕</button>
+    </div>
+
+    <div class="drawer-actions-bar">
+        <span id="historyCountLabel">0 saved plans in local memory</span>
+        <button type="button" class="btn-clear-history" id="clearHistoryBtn">Clear All</button>
+    </div>
+
+    <div id="historyDrawerList" class="drawer-list">
+        <!-- Rendered dynamically via JavaScript -->
+    </div>
+</aside>
+
+
+<!-- ===================================================================== -->
+<!-- MODAL: CONSOLIDATED GROCERY SHOPPING LIST                             -->
+<!-- ===================================================================== -->
+<div id="groceryModalBackdrop" class="modal-backdrop"></div>
+<div id="groceryModal" class="grocery-modal" role="dialog" aria-hidden="true">
+    <div class="modal-header">
+        <div>
+            <span class="section-tag">PRACTICAL SHOPPING ASSISTANT</span>
+            <h3>🛒 Grocery Shopping Checklist</h3>
+            <p>Consolidated ingredients across all meals with quantities ready for the market.</p>
+        </div>
+        <button type="button" class="modal-close-btn" id="groceryModalCloseBtn" aria-label="Close Grocery List">✕</button>
+    </div>
+
+    <div class="modal-toolbar">
+        <button type="button" class="btn-tool" id="copyGroceryBtn">
+            <span>📋</span> Copy to Clipboard
+        </button>
+        <button type="button" class="btn-tool" id="printGroceryBtn">
+            <span>🖨️</span> Print Checklist
+        </button>
+        <span id="groceryItemCount" class="grocery-count-pill">0 items</span>
+    </div>
+
+    <div id="groceryContent" class="grocery-content">
+        <!-- Dynamically categorized via JavaScript -->
+    </div>
+</div>
+
+
+<!-- PRINTABLE REPORT CONTAINER (Used exclusively during print) -->
+<div id="printableReport" class="print-only"></div>
+
+<script src="script.js?v=2.1"></script>
 </body>
 </html>

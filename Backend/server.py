@@ -46,6 +46,7 @@ class PlanGenerationRequest(BaseModel):
     sex: Literal["male", "female"] = Field("male", description="Biological sex")
     height_cm: float = Field(175.0, ge=50.0, le=250.0, description="Height in centimeters")
     weight_kg: float = Field(70.0, ge=20.0, le=300.0, description="Weight in kilograms")
+    target_weight_kg: Optional[float] = Field(None, ge=20.0, le=300.0, description="Target goal weight in kilograms")
     activity_level: str = Field(
         "moderate",
         description="sedentary, light, moderate, very_active, extremely_active"

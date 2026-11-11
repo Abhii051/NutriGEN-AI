@@ -183,7 +183,7 @@ def assign_food_role(row):
         return "dairy"
     if any(k in cat for k in ["nut and seed", "fats and oils"]):
         return "healthy_fat"
-    if any(k in cat for k in ["poultry", "beef", "pork", "finfish", "shellfish", "lamb", "veal"]):
+    if any(k in cat for k in ["poultry", "beef", "pork", "finfish", "shellfish", "lamb", "veal", "meat", "eggs"]):
         return "protein"
     if "legume" in cat:
         return "protein"
@@ -193,24 +193,25 @@ def assign_food_role(row):
     # Keyword fallback
     if any(k in desc for k in ["oil", "almond", "walnut", "cashew", "pistachio", "pecan", "hazelnut", "avocado", "flaxseed", "chia", "sunflower seed", "sesame seed", "pumpkin seed", "ghee", "butter"]):
         return "healthy_fat"
-    if any(k in desc for k in ["lentil", "dal", "chickpea", "bean", "tofu", "tempeh", "egg", "chicken", "fish", "meat"]):
+    if any(k in desc for k in ["lentil", "dal", "chickpea", "bean", "tofu", "tempeh", "egg", "chicken", "fish", "meat", "mutton", "turkey", "salmon", "souvlaki"]):
         return "protein"
     if any(k in desc for k in ["milk", "yogurt", "paneer", "curd", "cheese", "dahi"]):
         return "dairy"
-    if any(k in desc for k in ["spinach", "broccoli", "carrot", "tomato", "okra", "cauliflower", "cabbage", "gourd"]):
+    if any(k in desc for k in ["spinach", "broccoli", "carrot", "tomato", "okra", "cauliflower", "cabbage", "gourd", "bhindi", "aloo", "gobi"]):
         return "vegetable"
     if any(k in desc for k in ["apple", "banana", "orange", "berry", "grape", "mango", "papaya", "guava"]):
         return "fruit"
-    if any(k in desc for k in ["rice", "wheat", "oat", "roti", "chapati", "bread", "quinoa", "millet", "poha"]):
+    if any(k in desc for k in ["rice", "wheat", "oat", "roti", "chapati", "bread", "quinoa", "millet", "poha", "upma", "khichdi", "idli", "dosa"]):
         return "staple"
 
     return "other"
 
 
-def score_food_quality(row):
+def score_food_quality(row, diet_type="vegetarian"):
     """
     Ranks wholesome foods higher, prioritizing curated authentic everyday foods,
     culturally aligned items, vegetables, and fiber.
+    In non-vegetarian plans, promotes lean meats, poultry, fish, and eggs.
     """
     score = 0.0
     
@@ -225,6 +226,14 @@ def score_food_quality(row):
 
     cat = str(row.get("food_category", "")).lower()
     desc = str(row.get("description", "")).lower()
+
+    # Major boost for animal proteins in non-vegetarian diet
+    is_non_veg = ("non" in str(diet_type).lower())
+    if is_non_veg:
+        if any(k in cat for k in ["poultry", "finfish", "meat", "eggs", "seafood"]):
+            score += 12.0
+        elif any(k in desc for k in ["chicken", "fish", "salmon", "egg", "mutton", "tuna", "turkey", "souvlaki", "teriyaki"]):
+            score += 10.0
 
     if any(k in cat for k in ["vegetable", "fruit", "legume", "cereal grains"]):
         score += 1.5
@@ -257,26 +266,58 @@ def select_meal_plan_candidates(
     df_pref = df_pref.copy()
     df_pref["food_role"] = df_pref.apply(assign_food_role, axis=1)
     df_pref = df_pref[df_pref["food_role"] != "other"].copy()
-    df_pref["quality_score"] = df_pref.apply(score_food_quality, axis=1)
+    df_pref["quality_score"] = df_pref.apply(lambda r: score_food_quality(r, diet_type=diet_type), axis=1)
 
     used_ids = set()
     used_base_terms = set()
+
+    is_non_veg = ("non" in str(diet_type).lower())
+    is_vegan = (diet_type.lower() == "vegan")
 
     def get_base_term(desc):
         text = str(desc).lower()
         key_terms = [
             "poha", "upma", "idli", "dosa", "cheela", "chapati", "roti", "paratha", "naan", "pita", "khichdi",
             "basmati", "steamed rice", "brown rice", "soba", "udon", "oatmeal", "sweet potato", "toast",
-            "dal tadka", "rajma", "chana masala", "hummus", "falafel", "miso", "edamame", "tofu", "yakitori",
-            "paneer bhurji", "palak paneer", "chicken curry", "egg curry", "souvlaki", "salmon", "yakitori",
-            "bhindi", "okra", "aloo gobi", "lauki", "greek salad", "tzatziki", "bok choy", "broccoli",
+            "dal tadka", "toor dal", "masoor dal", "sambar", "rajma", "chana masala", "chole", "hummus", "falafel",
+            "miso", "edamame", "tofu", "paneer bhurji", "palak paneer", "paneer tikka",
+            "chicken curry", "tandoori chicken", "chicken tikka", "chicken biryani", "butter chicken", "souvlaki", "chicken teriyaki", "yakitori", "chicken breast",
+            "egg bhurji", "boiled eggs", "egg curry", "scrambled egg", "tamagoyaki", "omelette",
+            "fish curry", "salmon", "tuna salad", "mutton curry",
+            "bhindi", "okra", "aloo gobi", "lauki", "baingan", "greek salad", "tzatziki", "bok choy", "broccoli",
             "curd", "dahi", "greek yogurt", "makhana", "ghee", "olive oil", "sesame oil", "feta",
-            "peanut", "almond", "walnut", "cashew", "banana", "apple", "papaya", "nori", "scrambled egg"
+            "peanut", "almond", "walnut", "cashew", "banana", "apple", "papaya", "nori"
         ]
         for term in key_terms:
             if term in text:
                 return term
         return text[:12]
+
+    def get_best_non_veg_protein():
+        sub = df_pref[
+            df_pref["food_category"].isin(["poultry", "finfish", "meat", "eggs", "seafood", "shellfish"])
+            & (~df_pref["fdc_id"].isin(used_ids))
+        ]
+        if sub.empty:
+            sub = df_pref[
+                df_pref["description"].astype(str).str.contains(r"chicken|fish|salmon|tuna|mutton|egg|turkey|souvlaki|teriyaki", case=False, regex=True)
+                & (~df_pref["fdc_id"].isin(used_ids))
+            ]
+        if sub.empty:
+            return get_best_food("protein")
+
+        sub = sub.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
+        for _, row in sub.iterrows():
+            base = get_base_term(row["description"])
+            if base not in used_base_terms:
+                chosen = row
+                used_base_terms.add(base)
+                used_ids.add(chosen["fdc_id"])
+                return chosen
+
+        chosen = sub.iloc[0]
+        used_ids.add(chosen["fdc_id"])
+        return chosen
 
     def get_best_food(role):
         sub = df_pref[
@@ -305,26 +346,39 @@ def select_meal_plan_candidates(
         used_ids.add(chosen["fdc_id"])
         return chosen
 
-    is_vegan = (diet_type.lower() == "vegan")
-
     # Slot Blueprint (Strictly <= 14 items total)
     plan_structure = []
 
     # Breakfast (4 foods)
+    breakfast_protein = get_best_food("protein")
+    if is_non_veg:
+        egg_sub = df_pref[
+            ((df_pref["food_category"] == "eggs") | df_pref["description"].astype(str).str.contains(r"bhurji|scrambled egg|boiled egg|omelet", case=False, regex=True))
+            & (~df_pref["fdc_id"].isin(used_ids))
+        ]
+        if not egg_sub.empty:
+            egg_sub = egg_sub.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
+            chosen_egg = egg_sub.iloc[0]
+            used_ids.add(chosen_egg["fdc_id"])
+            used_base_terms.add(get_base_term(chosen_egg["description"]))
+            breakfast_protein = chosen_egg
+
     plan_structure.append(("Breakfast", "staple", get_best_food("staple"), (40.0, 150.0)))
-    plan_structure.append(("Breakfast", "protein", get_best_food("protein"), (40.0, 180.0)))
+    plan_structure.append(("Breakfast", "protein", breakfast_protein, (40.0, 180.0)))
     plan_structure.append(("Breakfast", "fruit", get_best_food("fruit"), (40.0, 180.0)))
     plan_structure.append(("Breakfast", "dairy" if not is_vegan else "protein", get_best_food("dairy" if not is_vegan else "protein"), (40.0, 180.0)))
 
     # Lunch (4 foods)
+    lunch_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
     plan_structure.append(("Lunch", "staple", get_best_food("staple"), (40.0, 180.0)))
-    plan_structure.append(("Lunch", "protein", get_best_food("protein"), (40.0, 200.0)))
+    plan_structure.append(("Lunch", "protein", lunch_protein, (40.0, 200.0)))
     plan_structure.append(("Lunch", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
     plan_structure.append(("Lunch", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
 
     # Dinner (4 foods)
+    dinner_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
     plan_structure.append(("Dinner", "staple", get_best_food("staple"), (40.0, 180.0)))
-    plan_structure.append(("Dinner", "protein", get_best_food("protein"), (40.0, 200.0)))
+    plan_structure.append(("Dinner", "protein", dinner_protein, (40.0, 200.0)))
     plan_structure.append(("Dinner", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
     plan_structure.append(("Dinner", "dairy" if not is_vegan else "vegetable", get_best_food("dairy" if not is_vegan else "vegetable"), (40.0, 180.0)))
 
