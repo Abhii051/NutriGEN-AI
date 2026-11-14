@@ -4,6 +4,7 @@ Exposes endpoints for nutritional calculation, meal plan optimization, and LLM r
 Includes CORS support and serves the modern frontend application.
 """
 
+import os
 from pathlib import Path
 import sys
 from typing import List, Optional, Literal
@@ -27,10 +28,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS for all origins (Frontend integration)
+# CORS configuration (Configurable via ALLOWED_ORIGINS environment variable)
+allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins if allowed_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

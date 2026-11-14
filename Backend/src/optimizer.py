@@ -18,14 +18,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 try:
     from Backend.src.preferences import create_preferences, apply_preferences
-    from Backend.src.candidates import add_candidate_roles
 except ImportError:
     try:
         from src.preferences import create_preferences, apply_preferences
-        from src.candidates import add_candidate_roles
     except ImportError:
         from preferences import create_preferences, apply_preferences
-        from candidates import add_candidate_roles
 
 
 # =========================================================
