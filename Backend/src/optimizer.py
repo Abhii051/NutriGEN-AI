@@ -319,9 +319,14 @@ def select_meal_plan_candidates(
                 used_base_terms.add(get_base_term(row["description"]))
                 return chosen
 
-        chosen = sub.iloc[0]
-        used_ids.add(chosen["fdc_id"])
-        return chosen
+        # Strictly never return a previously used fdc_id
+        unused = sub[~sub["fdc_id"].isin(used_ids)]
+        if not unused.empty:
+            chosen = unused.iloc[0]
+            used_ids.add(chosen["fdc_id"])
+            used_base_terms.add(get_base_term(chosen["description"]))
+            return chosen
+        return get_best_food("protein")
 
     def get_best_food(role):
         sub = df_pref[
@@ -352,16 +357,26 @@ def select_meal_plan_candidates(
                 used_base_terms.add(get_base_term(row["description"]))
                 return chosen
 
-        chosen = sub.iloc[0]
-        used_ids.add(chosen["fdc_id"])
-        return chosen
+        # Strict pass 3: Guaranteed unique fdc_id
+        unused = sub[~sub["fdc_id"].isin(used_ids)]
+        if not unused.empty:
+            chosen = unused.iloc[0]
+            used_ids.add(chosen["fdc_id"])
+            used_base_terms.add(get_base_term(chosen["description"]))
+            return chosen
 
-    # Slot Blueprint (Scales to 3, 4, or 5 distinct meals / snacks)
-    plan_structure = []
+        return None
 
-    # Breakfast (if 3+ meals requested, or single meal)
-    if number_of_meals >= 3 or number_of_meals == 1:
-        breakfast_protein = get_best_food("protein")
+    # Normalize meal & snack count seamlessly supporting both semantics:
+    # 1) number_of_meals represents total eating occasions (2, 3, 4, 5)
+    # 2) number_of_meals represents main meals (2, 3) + number_of_snacks (0, 1, 2)
+    total_eating_occasions = number_of_meals
+    if number_of_meals <= 3 and number_of_snacks > 0:
+        total_eating_occasions = number_of_meals + number_of_snacks
+
+    # Breakfast protein selection
+    breakfast_protein = None
+    if total_eating_occasions >= 3:
         if is_non_veg:
             egg_sub = df_pref[
                 ((df_pref["food_category"] == "eggs") | df_pref["description"].astype(str).str.contains(r"bhurji|scrambled egg|boiled egg|omelet", case=False, regex=True))
@@ -373,38 +388,106 @@ def select_meal_plan_candidates(
                 used_ids.add(chosen_egg["fdc_id"])
                 used_base_terms.add(get_base_term(chosen_egg["description"]))
                 breakfast_protein = chosen_egg
+            else:
+                breakfast_protein = get_best_food("protein")
+        else:
+            breakfast_protein = get_best_food("protein")
 
+    plan_structure = []
+
+    # 5 Meals: Breakfast, Morning Snack, Lunch, Evening Snack, Dinner
+    if total_eating_occasions >= 5:
+        # 1. Breakfast
         plan_structure.append(("Breakfast", "staple", get_best_food("staple"), (40.0, 150.0)))
         plan_structure.append(("Breakfast", "protein", breakfast_protein, (40.0, 180.0)))
         plan_structure.append(("Breakfast", "fruit", get_best_food("fruit"), (40.0, 180.0)))
         plan_structure.append(("Breakfast", "dairy" if not is_vegan else "protein", get_best_food("dairy" if not is_vegan else "protein"), (40.0, 180.0)))
 
-    # Morning Snack (for 5-meal plans with 2 snacks)
-    if number_of_snacks >= 2:
+        # 2. Morning Snack
         plan_structure.append(("Morning Snack", "fruit", get_best_food("fruit"), (40.0, 180.0)))
         plan_structure.append(("Morning Snack", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
 
-    # Lunch (always included for 2+ meals)
-    lunch_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
-    plan_structure.append(("Lunch", "staple", get_best_food("staple"), (40.0, 180.0)))
-    plan_structure.append(("Lunch", "protein", lunch_protein, (40.0, 200.0)))
-    plan_structure.append(("Lunch", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
-    plan_structure.append(("Lunch", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
+        # 3. Lunch
+        lunch_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
+        plan_structure.append(("Lunch", "staple", get_best_food("staple"), (40.0, 180.0)))
+        plan_structure.append(("Lunch", "protein", lunch_protein, (40.0, 200.0)))
+        plan_structure.append(("Lunch", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
+        plan_structure.append(("Lunch", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
 
-    # Evening Snack (or single Snack)
-    if number_of_snacks == 1:
-        plan_structure.append(("Snack", "fruit", get_best_food("fruit"), (40.0, 180.0)))
-        plan_structure.append(("Snack", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
-    elif number_of_snacks >= 2:
+        # 4. Evening Snack
         plan_structure.append(("Evening Snack", "fruit", get_best_food("fruit"), (40.0, 180.0)))
         plan_structure.append(("Evening Snack", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
 
-    # Dinner (always included for 2+ meals)
-    dinner_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
-    plan_structure.append(("Dinner", "staple", get_best_food("staple"), (40.0, 180.0)))
-    plan_structure.append(("Dinner", "protein", dinner_protein, (40.0, 200.0)))
-    plan_structure.append(("Dinner", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
-    plan_structure.append(("Dinner", "dairy" if not is_vegan else "vegetable", get_best_food("dairy" if not is_vegan else "vegetable"), (40.0, 180.0)))
+        # 5. Dinner
+        dinner_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
+        plan_structure.append(("Dinner", "staple", get_best_food("staple"), (40.0, 180.0)))
+        plan_structure.append(("Dinner", "protein", dinner_protein, (40.0, 200.0)))
+        plan_structure.append(("Dinner", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
+        plan_structure.append(("Dinner", "dairy" if not is_vegan else "vegetable", get_best_food("dairy" if not is_vegan else "vegetable"), (40.0, 180.0)))
+
+    # 4 Meals: Breakfast, Lunch, Snack, Dinner
+    elif total_eating_occasions == 4:
+        # 1. Breakfast
+        plan_structure.append(("Breakfast", "staple", get_best_food("staple"), (40.0, 150.0)))
+        plan_structure.append(("Breakfast", "protein", breakfast_protein, (40.0, 180.0)))
+        plan_structure.append(("Breakfast", "fruit", get_best_food("fruit"), (40.0, 180.0)))
+        plan_structure.append(("Breakfast", "dairy" if not is_vegan else "protein", get_best_food("dairy" if not is_vegan else "protein"), (40.0, 180.0)))
+
+        # 2. Lunch
+        lunch_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
+        plan_structure.append(("Lunch", "staple", get_best_food("staple"), (40.0, 180.0)))
+        plan_structure.append(("Lunch", "protein", lunch_protein, (40.0, 200.0)))
+        plan_structure.append(("Lunch", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
+        plan_structure.append(("Lunch", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
+
+        # 3. Snack
+        plan_structure.append(("Snack", "fruit", get_best_food("fruit"), (40.0, 180.0)))
+        plan_structure.append(("Snack", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
+
+        # 4. Dinner
+        dinner_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
+        plan_structure.append(("Dinner", "staple", get_best_food("staple"), (40.0, 180.0)))
+        plan_structure.append(("Dinner", "protein", dinner_protein, (40.0, 200.0)))
+        plan_structure.append(("Dinner", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
+        plan_structure.append(("Dinner", "dairy" if not is_vegan else "vegetable", get_best_food("dairy" if not is_vegan else "vegetable"), (40.0, 180.0)))
+
+    # 3 Meals: Breakfast, Lunch, Dinner
+    elif total_eating_occasions == 3:
+        # 1. Breakfast
+        plan_structure.append(("Breakfast", "staple", get_best_food("staple"), (40.0, 160.0)))
+        plan_structure.append(("Breakfast", "protein", breakfast_protein, (40.0, 180.0)))
+        plan_structure.append(("Breakfast", "fruit", get_best_food("fruit"), (40.0, 180.0)))
+        plan_structure.append(("Breakfast", "dairy" if not is_vegan else "protein", get_best_food("dairy" if not is_vegan else "protein"), (40.0, 180.0)))
+
+        # 2. Lunch
+        lunch_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
+        plan_structure.append(("Lunch", "staple", get_best_food("staple"), (40.0, 190.0)))
+        plan_structure.append(("Lunch", "protein", lunch_protein, (40.0, 220.0)))
+        plan_structure.append(("Lunch", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
+        plan_structure.append(("Lunch", "healthy_fat", get_best_food("healthy_fat"), (10.0, 40.0)))
+
+        # 3. Dinner
+        dinner_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
+        plan_structure.append(("Dinner", "staple", get_best_food("staple"), (40.0, 190.0)))
+        plan_structure.append(("Dinner", "protein", dinner_protein, (40.0, 220.0)))
+        plan_structure.append(("Dinner", "vegetable", get_best_food("vegetable"), (50.0, 250.0)))
+        plan_structure.append(("Dinner", "dairy" if not is_vegan else "vegetable", get_best_food("dairy" if not is_vegan else "vegetable"), (40.0, 180.0)))
+
+    # 2 Meals: Lunch, Dinner (Intermittent fasting)
+    else:
+        lunch_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
+        plan_structure.append(("Lunch", "staple", get_best_food("staple"), (50.0, 220.0)))
+        plan_structure.append(("Lunch", "protein", lunch_protein, (50.0, 250.0)))
+        plan_structure.append(("Lunch", "vegetable", get_best_food("vegetable"), (50.0, 300.0)))
+        plan_structure.append(("Lunch", "fruit", get_best_food("fruit"), (40.0, 200.0)))
+        plan_structure.append(("Lunch", "healthy_fat", get_best_food("healthy_fat"), (10.0, 50.0)))
+
+        dinner_protein = get_best_non_veg_protein() if is_non_veg else get_best_food("protein")
+        plan_structure.append(("Dinner", "staple", get_best_food("staple"), (50.0, 220.0)))
+        plan_structure.append(("Dinner", "protein", dinner_protein, (50.0, 250.0)))
+        plan_structure.append(("Dinner", "vegetable", get_best_food("vegetable"), (50.0, 300.0)))
+        plan_structure.append(("Dinner", "dairy" if not is_vegan else "vegetable", get_best_food("dairy" if not is_vegan else "vegetable"), (40.0, 200.0)))
+        plan_structure.append(("Dinner", "healthy_fat", get_best_food("healthy_fat"), (10.0, 50.0)))
 
     # Filter out any None values
     valid_slots = [item for item in plan_structure if item[2] is not None]
@@ -514,6 +597,14 @@ def optimize_quantities(
     # Final validation on clamped quantities
     verified_cal = np.dot(calories, opt_x / 100)
     final_err_pct = round(abs(verified_cal - target_calories) / target_calories * 100, 2)
+
+    # Proportional bound-clamped recovery if numerical convergence did not achieve <= 5% error
+    if final_err_pct > 5.0 and verified_cal > 0:
+        scale_factor = target_calories / verified_cal
+        opt_x = np.round(np.clip(opt_x * scale_factor, [b[0] for b in bounds], [b[1] for b in bounds]), 1)
+        verified_cal = np.dot(calories, opt_x / 100)
+        final_err_pct = round(abs(verified_cal - target_calories) / target_calories * 100, 2)
+        success = bool(final_err_pct <= 5.0)
 
     opt_metadata = {
         "success": bool(success),

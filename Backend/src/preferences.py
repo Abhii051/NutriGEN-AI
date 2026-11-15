@@ -263,54 +263,56 @@ def apply_allergy_filter(df, preferences):
     if not allergies:
         return df.reset_index(drop=True)
 
-    allergy_aliases = {
-        "peanut": ["peanut", "groundnut", "arachis", "peanut butter"],
-        "peanuts": ["peanut", "groundnut", "arachis", "peanut butter"],
+    def normalize_allergen_key(term: str) -> str:
+        """Strip punctuation and normalize plural suffixes for robust allergen ontology mapping."""
+        t = re.sub(r"[^a-z0-9]", "", str(term).lower())
+        if t.endswith("es") and len(t) > 4:
+            return t[:-2]
+        if t.endswith("s") and len(t) > 3:
+            return t[:-1]
+        return t
+
+    canonical_clusters = {
+        "peanut": ["peanut", "groundnut", "arachis", "peanut butter", "monkey nut"],
         "groundnut": ["peanut", "groundnut", "arachis"],
-
-        "tree_nuts": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "nut"],
-        "tree nuts": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "nut"],
-        "nuts": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "peanut", "nut"],
+        "treenut": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "chestnut", "pine nut", "nut"],
         "nut": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "peanut", "nut"],
-
-        "milk": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy"],
-        "dairy": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy"],
-        "lactose": ["milk", "whey", "casein", "cheese", "yogurt", "curd", "paneer", "dairy"],
-
-        "egg": ["egg", "albumen", "egg white", "egg yolk", "omelet", "bhurji"],
-        "eggs": ["egg", "albumen", "egg white", "egg yolk", "omelet", "bhurji"],
-
+        "milk": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy", "lactose"],
+        "dairy": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy", "lactose"],
+        "lactose": ["milk", "whey", "casein", "cheese", "yogurt", "curd", "paneer", "dairy", "lactose"],
+        "egg": ["egg", "albumen", "egg white", "egg yolk", "omelet", "omelette", "bhurji", "mayonnaise"],
         "soy": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
         "soya": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
         "soybean": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
-
-        "wheat": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "maida"],
-        "gluten": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "barley", "rye"],
-
-        "fish": ["fish", "salmon", "tuna", "sardine", "anchovy", "trout", "cod", "tilapia", "mackerel"],
-        "fishes": ["fish", "salmon", "tuna", "sardine", "anchovy", "trout", "cod", "tilapia", "mackerel"],
-
-        "shellfish": ["shrimp", "prawn", "crab", "lobster", "clam", "oyster", "mussel", "shellfish"],
-        "seafood": ["fish", "salmon", "tuna", "sardine", "shrimp", "prawn", "crab", "lobster", "clam", "oyster", "shellfish"]
+        "wheat": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "maida", "barley", "rye", "spelt"],
+        "gluten": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "barley", "rye", "spelt"],
+        "fish": ["fish", "salmon", "tuna", "sardine", "anchovy", "trout", "cod", "tilapia", "mackerel", "halibut", "snapper"],
+        "shellfish": ["shrimp", "prawn", "crab", "lobster", "clam", "oyster", "mussel", "scallop", "calamari", "squid", "octopus", "shellfish"],
+        "seafood": ["fish", "salmon", "tuna", "sardine", "shrimp", "prawn", "crab", "lobster", "clam", "oyster", "shellfish"],
+        "sesame": ["sesame", "tahini", "til", "gingelly"],
+        "mustard": ["mustard", "sarson", "rai"]
     }
 
     expanded_terms = []
 
     for allergy in allergies:
-        cleaned = allergy.lower().strip()
-        # Stemming: check exact, singular, and underscored variants
-        singular = cleaned[:-1] if cleaned.endswith("s") and len(cleaned) > 3 else cleaned
-        normalized = cleaned.replace(" ", "_")
-
+        cleaned_raw = str(allergy).lower().strip()
+        norm = normalize_allergen_key(cleaned_raw)
         matched = False
-        for candidate in [cleaned, singular, normalized]:
-            if candidate in allergy_aliases:
-                expanded_terms.extend(allergy_aliases[candidate])
-                matched = True
-                break
+
+        # Direct canonical normalized match
+        if norm in canonical_clusters:
+            expanded_terms.extend(canonical_clusters[norm])
+            matched = True
+        else:
+            # Substring/cluster scan across canonical ontology keys
+            for key, cluster in canonical_clusters.items():
+                if key in norm or key in cleaned_raw:
+                    expanded_terms.extend(cluster)
+                    matched = True
 
         if not matched:
-            expanded_terms.append(cleaned)
+            expanded_terms.append(cleaned_raw)
 
     # De-duplicate expanded terms while preserving order
     expanded_terms = list(dict.fromkeys(expanded_terms))

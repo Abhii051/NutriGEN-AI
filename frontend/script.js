@@ -240,22 +240,8 @@ function buildPayload(data) {
 
     const sex = data.gender === "female" ? "female" : "male";
     const totalMeals = Number(data.meals) || 4;
-    let number_of_meals = 3;
-    let number_of_snacks = 1;
-
-    if (totalMeals === 3) {
-        number_of_meals = 3;
-        number_of_snacks = 0;
-    } else if (totalMeals === 4) {
-        number_of_meals = 3;
-        number_of_snacks = 1;
-    } else if (totalMeals === 5) {
-        number_of_meals = 3;
-        number_of_snacks = 2;
-    } else if (totalMeals === 2) {
-        number_of_meals = 2;
-        number_of_snacks = 0;
-    }
+    const number_of_meals = totalMeals;
+    const number_of_snacks = totalMeals === 4 ? 1 : (totalMeals === 5 ? 2 : 0);
 
     const allergies = data.allergies
         ? data.allergies.split(",").map(s => s.trim()).filter(Boolean)
@@ -402,7 +388,7 @@ function displayMealPlan(response, optionalUserData = null) {
                 <span class="opt-solver-tag" style="margin-left: 10px;">SciPy SLSQP Constrained Solver · Bounded Portions</span>
             </div>
             <div class="opt-solver-tag">
-                ${response.llm_engine ? `✦ Recipes: ${response.llm_engine}` : "✦ Verified Clinical Macro Engine"}
+                ${response.llm_engine ? `✦ Recipes: ${escapeHtml(response.llm_engine)}` : "✦ Verified Clinical Macro Engine"}
             </div>
         </div>
 
@@ -499,57 +485,70 @@ function displayMealPlan(response, optionalUserData = null) {
         const card = el("div", "meal-card-full");
 
         const header = el("div", "meal-card-header");
-        header.innerHTML = `
-            <div class="meal-name-row">
-                <span class="meal-emoji">${mealEmojis[mealName] || "🍽️"}</span>
-                <span class="meal-name">${mealName}</span>
-            </div>
-            ${recipe.dish_title ? `<div class="dish-title">${recipe.dish_title}</div>` : ""}
-            ${recipe.cooking_time ? `<div class="cook-time">⏱ Cook Time: ${recipe.cooking_time}</div>` : ""}
-        `;
+        const nameRow = el("div", "meal-name-row");
+        nameRow.appendChild(el("span", "meal-emoji", mealEmojis[mealName] || "🍽️"));
+        nameRow.appendChild(el("span", "meal-name", mealName));
+        header.appendChild(nameRow);
+
+        if (recipe.dish_title) {
+            header.appendChild(el("div", "dish-title", recipe.dish_title));
+        }
+        if (recipe.cooking_time) {
+            header.appendChild(el("div", "cook-time", `⏱ Cook Time: ${recipe.cooking_time}`));
+        }
         card.appendChild(header);
 
         // Foods Table with pixel-perfect column alignment
         const tableWrap = el("div", "meal-table-wrap");
         const table = el("table", "meal-food-table");
 
-        table.innerHTML = `
-            <thead>
-                <tr>
-                    <th class="col-food">Food & Serving</th>
-                    <th class="col-qty">Weight</th>
-                    <th class="col-num">Cal</th>
-                    <th class="col-num">Protein</th>
-                    <th class="col-num">Carbs</th>
-                    <th class="col-num">Fat</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${foods.map(f => {
-                    const serving = getServingHint(f.food, f.grams);
-                    const raw = f.food || "—";
-                    const parts = raw.split(",");
-                    const mainTitle = parts[0].trim();
-                    const subTitle = parts.length > 1 ? parts.slice(1).join(",").trim() : "";
-
-                    return `
-                        <tr>
-                            <td class="col-food">
-                                <div class="food-cell">
-                                    <strong class="food-title" title="${raw}">${mainTitle}</strong>
-                                    <span class="food-desc">${serving}${subTitle ? ' · ' + subTitle : ''}</span>
-                                </div>
-                            </td>
-                            <td class="col-qty">${fmt(f.grams, 0)}g</td>
-                            <td class="col-num col-cal">${fmt(f.calories, 0)}</td>
-                            <td class="col-num col-macro">${fmt(f.protein_g, 1)}g</td>
-                            <td class="col-num col-macro">${fmt(f.carbs_g, 1)}g</td>
-                            <td class="col-num col-macro">${fmt(f.fat_g, 1)}g</td>
-                        </tr>
-                    `;
-                }).join("")}
-            </tbody>
+        const thead = document.createElement("thead");
+        thead.innerHTML = `
+            <tr>
+                <th class="col-food">Food &amp; Serving</th>
+                <th class="col-qty">Weight</th>
+                <th class="col-num">Cal</th>
+                <th class="col-num">Protein</th>
+                <th class="col-num">Carbs</th>
+                <th class="col-num">Fat</th>
+            </tr>
         `;
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        foods.forEach(f => {
+            const tr = document.createElement("tr");
+
+            const tdFood = el("td", "col-food");
+            const foodCell = el("div", "food-cell");
+            const raw = f.food || "—";
+            const parts = raw.split(",");
+            const mainTitle = parts[0].trim();
+            const subTitle = parts.length > 1 ? parts.slice(1).join(",").trim() : "";
+            const serving = getServingHint(f.food, f.grams);
+
+            const strong = el("strong", "food-title", mainTitle);
+            strong.title = raw;
+            const desc = el("span", "food-desc", serving + (subTitle ? ` · ${subTitle}` : ''));
+            foodCell.appendChild(strong);
+            foodCell.appendChild(desc);
+            tdFood.appendChild(foodCell);
+
+            const tdQty = el("td", "col-qty", `${fmt(f.grams, 0)}g`);
+            const tdCal = el("td", "col-num col-cal", fmt(f.calories, 0));
+            const tdProt = el("td", "col-num col-macro", `${fmt(f.protein_g, 1)}g`);
+            const tdCarb = el("td", "col-num col-macro", `${fmt(f.carbs_g, 1)}g`);
+            const tdFat = el("td", "col-num col-macro", `${fmt(f.fat_g, 1)}g`);
+
+            tr.appendChild(tdFood);
+            tr.appendChild(tdQty);
+            tr.appendChild(tdCal);
+            tr.appendChild(tdProt);
+            tr.appendChild(tdCarb);
+            tr.appendChild(tdFat);
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
 
         tableWrap.appendChild(table);
         card.appendChild(tableWrap);
@@ -671,8 +670,8 @@ function updateHistoryUI() {
 
                 div.innerHTML = `
                     <div class="hp-info">
-                        <h5>${cuisine} · ${Math.round(cal)} kcal</h5>
-                        <small>${item.formattedDate}</small>
+                        <h5>${escapeHtml(cuisine)} · ${Math.round(cal)} kcal</h5>
+                        <small>${escapeHtml(item.formattedDate)}</small>
                     </div>
                 `;
 
@@ -711,15 +710,15 @@ function renderHistoryDrawer() {
         const card = el("div", "saved-plan-card");
         card.innerHTML = `
             <div class="spc-top">
-                <span class="spc-time">${item.formattedDate}</span>
-                <span class="spc-cuisine-tag">${capitalize(u.cuisine || 'indian')}</span>
+                <span class="spc-time">${escapeHtml(item.formattedDate)}</span>
+                <span class="spc-cuisine-tag">${escapeHtml(capitalize(u.cuisine || 'indian'))}</span>
             </div>
-            <h4 class="spc-title">${u.name || 'Personalized'} Plan (${Math.round(nr.calories || mp.calories || 2000)} kcal)</h4>
+            <h4 class="spc-title">${escapeHtml(u.name || 'Personalized')} Plan (${Math.round(nr.calories || mp.calories || 2000)} kcal)</h4>
             <div class="spc-chips">
-                <span class="spc-chip">${capitalize(u.diet_type || 'Vegetarian')}</span>
-                <span class="spc-chip">${capitalize(u.goal?.replace('_', ' ') || 'Maintenance')}</span>
-                <span class="spc-chip">${u.weight_kg ? `${u.weight_kg} kg` : ''}</span>
-                ${u.target_weight_kg ? `<span class="spc-chip">Goal: ${u.target_weight_kg} kg</span>` : ''}
+                <span class="spc-chip">${escapeHtml(capitalize(u.diet_type || 'Vegetarian'))}</span>
+                <span class="spc-chip">${escapeHtml(capitalize(u.goal?.replace('_', ' ') || 'Maintenance'))}</span>
+                <span class="spc-chip">${u.weight_kg ? `${escapeHtml(u.weight_kg)} kg` : ''}</span>
+                ${u.target_weight_kg ? `<span class="spc-chip">Goal: ${escapeHtml(u.target_weight_kg)} kg</span>` : ''}
             </div>
             <div class="spc-macros">
                 <div class="spc-macro-item">
@@ -1017,12 +1016,12 @@ function exportPlanToPrint(plan) {
             <div>
                 <h1>NutriGEN-AI Clinical Nutrition Report</h1>
                 <p>Personalized Precision Nutrition & Meal Prescription</p>
-                <p><strong>Patient / User:</strong> ${u.name || "Client"} | <strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+                <p><strong>Patient / User:</strong> ${escapeHtml(u.name || "Client")} | <strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
             </div>
             <div style="text-align: right;">
                 <p><strong>Calorie Target:</strong> ${fmt(totals.calories || nr.calories, 0)} kcal/day</p>
                 <p><strong>BMR:</strong> ${fmt(bio.bmr || nr.bmr, 0)} kcal | <strong>TDEE:</strong> ${fmt(bio.tdee || nr.tdee, 0)} kcal</p>
-                <p><strong>BMI:</strong> ${fmt(bio.bmi, 1)} (${bio.bmi_category || 'Normal'})</p>
+                <p><strong>BMI:</strong> ${fmt(bio.bmi, 1)} (${escapeHtml(bio.bmi_category || 'Normal')})</p>
             </div>
         </div>
     `;
@@ -1125,7 +1124,7 @@ form.addEventListener("submit", async function (event) {
         errBox.innerHTML = `
             <div class="error-icon">⚠️</div>
             <h3>Could Not Generate Meal Plan</h3>
-            <p>${error.message || "Ensure your backend server is active at http://127.0.0.1:8000"}</p>
+            <p>${escapeHtml(error.message) || "Ensure your backend server is active at http://127.0.0.1:8000"}</p>
             <p style="margin-top: 10px; font-size: 11px; color: #777;">
                 To launch the server: <code>python -m uvicorn Backend.server:app --reload --port 8000</code>
             </p>

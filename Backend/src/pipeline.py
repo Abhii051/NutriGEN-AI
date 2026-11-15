@@ -197,10 +197,13 @@ def run_nutrigen_pipeline(user_data: Dict[str, Any]) -> Dict[str, Any]:
         "water_intake_liters": water_intake_l
     }
 
-    # 6. Build Final Response Payload
+    # 6. Determine Effective Engine & Build Final Response Payload
+    recipe_engines = [r.get("engine") for r in recipes.values() if r.get("engine")]
+    effective_engine = recipe_engines[0] if recipe_engines else "Heuristic Precision Engine"
+
     return {
         "status": "success",
-        "llm_engine": f"Groq {PRIMARY_GROQ_MODEL}",
+        "llm_engine": effective_engine,
         "biometrics": biometrics,
         "nutrition_requirements": {
             "bmr": profile["bmr"],

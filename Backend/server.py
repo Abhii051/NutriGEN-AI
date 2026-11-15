@@ -29,16 +29,29 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration (Configurable via ALLOWED_ORIGINS environment variable)
-allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*")
-allowed_origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
-is_wildcard = allowed_origins == ["*"]
+# CORS configuration: Defaults to explicit localhost origins for security.
+# In production, set ALLOWED_ORIGINS environment variable (e.g. "https://nutrigen-ai.com,https://app.nutrigen.ai").
+default_origins = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins_env:
+    allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+else:
+    allowed_origins = default_origins
+
+is_wildcard = "*" in allowed_origins
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins if allowed_origins else ["*"],
+    allow_origins=allowed_origins,
     allow_credentials=not is_wildcard,  # W3C CORS Spec: credentials must be False when origin is '*'
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
