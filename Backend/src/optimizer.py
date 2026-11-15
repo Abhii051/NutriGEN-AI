@@ -571,10 +571,11 @@ def optimize_quantities(
 
     final_cal = np.dot(calories, res.x / 100)
     cal_error = abs(final_cal - target_calories) / target_calories
-    success = bool(res.success and cal_error <= 0.05)
+    solver_converged = bool(res.success)
+    fallback_used = False
 
     # Fallback refinement if hard inequality constraint caused infeasibility or high error
-    if not success:
+    if not (solver_converged and cal_error <= 0.05):
         res_relaxed = minimize(
             objective,
             x0,
@@ -584,10 +585,18 @@ def optimize_quantities(
         )
         final_cal_rel = np.dot(calories, res_relaxed.x / 100)
         cal_error_rel = abs(final_cal_rel - target_calories) / target_calories
-        if cal_error_rel < cal_error:
+
+        # Adopt relaxed solution only if it is strictly better or successfully converged
+        if res_relaxed.success and cal_error_rel <= 0.05:
             res = res_relaxed
             cal_error = cal_error_rel
-            success = bool(cal_error <= 0.05)
+            solver_converged = True
+            fallback_used = True
+        elif cal_error_rel < cal_error:
+            res = res_relaxed
+            cal_error = cal_error_rel
+            solver_converged = bool(res_relaxed.success)
+            fallback_used = True
 
     # Validate and clamp bounds strictly
     opt_x = np.round(res.x, 1)
@@ -597,6 +606,7 @@ def optimize_quantities(
     # Final validation on clamped quantities
     verified_cal = np.dot(calories, opt_x / 100)
     final_err_pct = round(abs(verified_cal - target_calories) / target_calories * 100, 2)
+    recovered = False
 
     # Proportional bound-clamped recovery if numerical convergence did not achieve <= 5% error
     if final_err_pct > 5.0 and verified_cal > 0:
@@ -604,13 +614,20 @@ def optimize_quantities(
         opt_x = np.round(np.clip(opt_x * scale_factor, [b[0] for b in bounds], [b[1] for b in bounds]), 1)
         verified_cal = np.dot(calories, opt_x / 100)
         final_err_pct = round(abs(verified_cal - target_calories) / target_calories * 100, 2)
-        success = bool(final_err_pct <= 5.0)
+        recovered = True
+
+    within_tolerance = bool(final_err_pct <= 5.0)
+    # Strictly require solver convergence AND within tolerance for overall success
+    overall_success = bool(solver_converged and within_tolerance)
 
     opt_metadata = {
-        "success": bool(success),
+        "success": bool(overall_success),
+        "solver_converged": bool(solver_converged),
         "solver_message": str(res.message),
         "calorie_error_percent": final_err_pct,
-        "is_within_tolerance": bool(final_err_pct <= 5.0)
+        "is_within_tolerance": bool(within_tolerance),
+        "fallback_used": bool(fallback_used),
+        "bounded_recovery_applied": bool(recovered)
     }
 
     return opt_x, opt_metadata

@@ -26,6 +26,86 @@ GROQ_MODELS = [
 PRIMARY_GROQ_MODEL = GROQ_MODELS[0]
 
 
+ALLERGEN_SAFETY_CLUSTERS = {
+    "peanut": ["peanut", "groundnut", "arachis", "peanut butter"],
+    "groundnut": ["peanut", "groundnut", "arachis"],
+    "treenut": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "chestnut", "pine nut", "nut"],
+    "nut": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "peanut", "nut"],
+    "milk": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy", "lactose"],
+    "dairy": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy", "lactose"],
+    "lactose": ["milk", "whey", "casein", "cheese", "yogurt", "curd", "paneer", "dairy", "lactose"],
+    "egg": ["egg", "albumen", "egg white", "egg yolk", "omelet", "omelette", "bhurji", "mayonnaise"],
+    "soy": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
+    "soya": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
+    "soybean": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
+    "wheat": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "maida", "barley", "rye", "spelt"],
+    "gluten": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "barley", "rye", "spelt"],
+    "fish": ["fish", "salmon", "tuna", "sardine", "anchovy", "trout", "cod", "tilapia", "mackerel", "halibut", "snapper"],
+    "shellfish": ["shrimp", "prawn", "crab", "lobster", "clam", "oyster", "mussel", "scallop", "calamari", "squid", "octopus", "shellfish"],
+    "seafood": ["fish", "salmon", "tuna", "sardine", "shrimp", "prawn", "crab", "lobster", "clam", "oyster", "shellfish"],
+    "sesame": ["sesame", "tahini", "til", "gingelly"],
+    "mustard": ["mustard", "sarson", "rai"]
+}
+
+
+def validate_recipe_safety(recipe_dict: Dict[str, Any], prohibited_allergies: Optional[List[str]]) -> bool:
+    """
+    Validates that LLM-generated recipe text does not mention any prohibited allergen terms.
+    Expands input allergy categories to full clinical alias clusters.
+    If an allergen is found (e.g. LLM hallucinated peanut butter or almond), returns False so the
+    system falls back to the deterministic safe heuristic generator.
+    """
+    if not recipe_dict or not isinstance(recipe_dict, dict):
+        return False
+    if not prohibited_allergies:
+        return True
+
+    text_to_scan = (
+        str(recipe_dict.get("dish_title", "")) + " " +
+        " ".join(str(s) for s in recipe_dict.get("instructions", [])) + " " +
+        str(recipe_dict.get("chef_notes", ""))
+    ).lower()
+
+    # Expand prohibited allergies across canonical ontology
+    all_prohibited = []
+    for allergen in prohibited_allergies:
+        raw = str(allergen).lower().strip()
+        norm = re.sub(r"[^a-z0-9]", "", raw)
+        if norm.endswith("es") and len(norm) > 4:
+            norm = norm[:-2]
+        elif norm.endswith("s") and len(norm) > 3:
+            norm = norm[:-1]
+
+        matched = False
+        if norm in ALLERGEN_SAFETY_CLUSTERS:
+            all_prohibited.extend(ALLERGEN_SAFETY_CLUSTERS[norm])
+            matched = True
+        else:
+            for k, cluster in ALLERGEN_SAFETY_CLUSTERS.items():
+                if k in norm or k in raw:
+                    all_prohibited.extend(cluster)
+                    matched = True
+        if not matched:
+            all_prohibited.append(raw)
+
+    all_prohibited = list(dict.fromkeys(all_prohibited))
+
+    for term in all_prohibited:
+        if term == "egg":
+            pattern = r"\beggs?\b(?!plant)"
+        else:
+            pattern = rf"\b{re.escape(term)}s?\b"
+
+        if re.search(pattern, text_to_scan):
+            logger.warning(
+                f"Recipe safety validation failed: prohibited allergen term '{term}' "
+                f"detected in LLM output. Rejecting recipe."
+            )
+            return False
+
+    return True
+
+
 def extract_json_from_text(content: str) -> Optional[Dict[str, Any]]:
     """Robustly extract and parse JSON from LLM response (handling markdown fences, etc)."""
     if not content:
@@ -137,6 +217,14 @@ def generate_recipe_with_groq(
                     if parsed and "dish_title" in parsed and "instructions" in parsed:
                         if isinstance(parsed["instructions"], list) and len(parsed["instructions"]) > 3:
                             parsed["instructions"] = parsed["instructions"][:3]
+
+                        # Post-generation clinical validation of LLM output
+                        if allergies and not validate_recipe_safety(parsed, allergies):
+                            logger.warning(
+                                f"Groq ({model_name}) recipe failed allergen safety validation for {meal_type}. Trying next model."
+                            )
+                            continue
+
                         parsed["engine"] = f"Groq ({model_name})"
                         logger.info(f"Groq ({model_name}) successfully generated recipe for {meal_type}")
                         return parsed
@@ -234,7 +322,7 @@ def generate_fallback_recipe(
         step2 = f"Toss: Lightly toast the dry ingredients in a skillet for 2-3 minutes with {'a pinch of smoked paprika and sea salt' if is_spicy else 'cinnamon and sea salt'}."
         step3 = f"Enjoy: Mix with the fruit and staple components and enjoy immediately as a nutrient-dense snack."
 
-    allergy_note = f" (100% allergen-safe: strictly excluded {', '.join(allergies)})" if allergies else ""
+    allergy_note = f" (Allergen filter applied: strictly excluded {', '.join(allergies)})" if allergies else ""
 
     return {
         "dish_title": dish_title,
