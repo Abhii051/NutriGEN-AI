@@ -58,8 +58,10 @@ def run_nutrigen_pipeline(user_data: Dict[str, Any]) -> Dict[str, Any]:
         "lightly active": "light",
         "moderate": "moderate",
         "moderately active": "moderate",
+        "active": "very_active",
         "very_active": "very_active",
         "very active": "very_active",
+        "extremely": "extremely_active",
         "extremely_active": "extremely_active",
         "extremely active": "extremely_active"
     }

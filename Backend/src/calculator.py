@@ -10,8 +10,9 @@ def calculate_tdee(bmr, activity_level):
         "sedentary": 1.2,
         "light": 1.375,
         "moderate": 1.55,
+        "very_active": 1.725,
+        "extremely_active": 1.9,
         "active": 1.725,
-        "very_active": 1.9
     }
 
     return bmr * activity_factors[activity_level]

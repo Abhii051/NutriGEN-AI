@@ -45,6 +45,16 @@ let currentActivePlan = null;
 
 // ─── Utility Helpers ─────────────────────────────────────────────────────────
 
+function escapeHtml(s) {
+    if (s === null || s === undefined) return "";
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 function el(tag, className, text) {
     const e = document.createElement(tag);
     if (className) e.className = className;
@@ -116,8 +126,11 @@ function calculateBiometricsLive() {
         sedentary: 1.20,
         light: 1.375,
         moderate: 1.55,
+        very_active: 1.725,
+        extremely_active: 1.90,
+        // Backward-compatibility aliases
         active: 1.725,
-        very_active: 1.90
+        extremely: 1.90
     };
     const factor = activityFactors[activity] || 1.55;
     const tdee = bmr * factor;
@@ -226,8 +239,23 @@ function buildPayload(data) {
     }
 
     const sex = data.gender === "female" ? "female" : "male";
-    const number_of_snacks = Math.max(0, data.meals - 3);
-    const number_of_meals = 3;
+    const totalMeals = Number(data.meals) || 4;
+    let number_of_meals = 3;
+    let number_of_snacks = 1;
+
+    if (totalMeals === 3) {
+        number_of_meals = 3;
+        number_of_snacks = 0;
+    } else if (totalMeals === 4) {
+        number_of_meals = 3;
+        number_of_snacks = 1;
+    } else if (totalMeals === 5) {
+        number_of_meals = 3;
+        number_of_snacks = 2;
+    } else if (totalMeals === 2) {
+        number_of_meals = 2;
+        number_of_snacks = 0;
+    }
 
     const allergies = data.allergies
         ? data.allergies.split(",").map(s => s.trim()).filter(Boolean)
@@ -362,13 +390,15 @@ function displayMealPlan(response, optionalUserData = null) {
     const targetCal = Number(nr.calories) || 1;
     const actualCal = Number(totals.calories) || 0;
     const variancePercent = Math.abs((actualCal - targetCal) / targetCal) * 100;
-    const accuracyScore = Math.max(90, Math.min(99.9, 100 - variancePercent)).toFixed(1);
+    // Un-inflated, authentic mathematical accuracy calculation
+    const rawAccuracy = 100 - variancePercent;
+    const accuracyScore = Math.max(0, Math.min(100, rawAccuracy)).toFixed(1);
 
     const optCard = el("div", "optimization-card");
     optCard.innerHTML = `
         <div class="opt-card-header">
             <div>
-                <span class="opt-badge-pill">🎯 ${accuracyScore}% Mathematical Match</span>
+                <span class="opt-badge-pill">🎯 ${accuracyScore}% Precision Match (±${variancePercent.toFixed(1)}% delta)</span>
                 <span class="opt-solver-tag" style="margin-left: 10px;">SciPy SLSQP Constrained Solver · Bounded Portions</span>
             </div>
             <div class="opt-solver-tag">
@@ -443,9 +473,23 @@ function displayMealPlan(response, optionalUserData = null) {
     // 3. Render Per-Meal Cards
     const mealPlanData = mp.meal_plan || {};
     const recipesData = response.recipes || mp.recipes || {};
-    const mealOrder = ["Breakfast", "Lunch", "Dinner", "Snack"];
+    const preferredOrder = ["Breakfast", "Morning Snack", "Lunch", "Evening Snack", "Dinner", "Snack"];
+    const allMealKeys = Object.keys(mealPlanData);
+    const mealOrder = [
+        ...preferredOrder.filter(m => allMealKeys.includes(m)),
+        ...allMealKeys.filter(m => !preferredOrder.includes(m))
+    ];
 
     const mealsGrid = el("div", "meals-grid");
+
+    const mealEmojis = {
+        Breakfast: "🌅",
+        "Morning Snack": "☕",
+        Lunch: "☀️",
+        "Evening Snack": "🍎",
+        Dinner: "🌙",
+        Snack: "🍎"
+    };
 
     mealOrder.forEach(mealName => {
         const foods = mealPlanData[mealName];
@@ -454,7 +498,6 @@ function displayMealPlan(response, optionalUserData = null) {
         const recipe = recipesData[mealName] || {};
         const card = el("div", "meal-card-full");
 
-        const mealEmojis = { Breakfast: "🌅", Lunch: "☀️", Dinner: "🌙", Snack: "🍎" };
         const header = el("div", "meal-card-header");
         header.innerHTML = `
             <div class="meal-name-row">
@@ -519,7 +562,10 @@ function displayMealPlan(response, optionalUserData = null) {
 
             recipe.instructions.forEach((step, i) => {
                 const s = el("div", "recipe-step");
-                s.innerHTML = `<span class="step-num">${i + 1}</span><span>${step}</span>`;
+                const num = el("span", "step-num", String(i + 1));
+                const text = el("span", "", String(step)); // Safe textContent avoids XSS
+                s.appendChild(num);
+                s.appendChild(text);
                 drawer.appendChild(s);
             });
 

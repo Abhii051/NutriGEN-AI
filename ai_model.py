@@ -65,7 +65,9 @@ def calculate_tdee(bmr, activity_level):
         "light": 1.375,
         "moderate": 1.55,
         "very_active": 1.725,
-        "extremely_active": 1.90
+        "extremely_active": 1.90,
+        "active": 1.725,
+        "extremely": 1.90,
     }
 
     activity_level = activity_level.lower()

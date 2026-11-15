@@ -18,12 +18,10 @@ load_dotenv()
 
 logger = logging.getLogger("nutrigen.recipe_llm")
 
-# Primary models supported on Groq with sub-second latency
+# Primary models supported on Groq with high reliability and fast response times
 GROQ_MODELS = [
-    "openai/gpt-oss-20b",
-    "openai/gpt-oss-120b",
-    "qwen/qwen3.8-27b",
-    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant"
 ]
 PRIMARY_GROQ_MODEL = GROQ_MODELS[0]
 
@@ -93,6 +91,7 @@ def generate_recipe_with_groq(
         "You are an executive chef and sports nutritionist specializing in precision meal prep. "
         "Create an appetizing, practical recipe that strictly incorporates the exact optimizer ingredients and gram portions. "
         "Strictly adhere to the user's custom cooking constraints (cooking time, heat/spice level, appliances, dietary restrictions). "
+        "Do NOT add external unlisted ingredients (such as unallocated milk, oils, butter, or stock). Cooking water, salt, pepper, and dry spices are permitted. "
         "Output ONLY valid JSON with keys: 'dish_title' (string), 'cooking_time' (string), "
         "'instructions' (array of exactly 3 concise, chronological step strings), and 'chef_notes' (string)."
     )
@@ -178,6 +177,13 @@ def generate_fallback_recipe(
         else:
             others.append(clean_name)
 
+    allocated_fats = [
+        clean_food_name(f["food"])
+        for f in food_items
+        if f.get("food_role") == "healthy_fat" or any(w in str(f.get("food", "")).lower() for w in ["ghee", "oil", "butter"])
+    ]
+    fat_instruction = f"with your measured {allocated_fats[0]}" if allocated_fats else "using non-stick cookware or water sauté"
+
     lead_staple = staples[0] if staples else (clean_food_name(food_items[0]["food"]) if food_items else "Grain")
     lead_protein = proteins[0] if proteins else (others[0] if others else "Protein")
     fresh_item = veggies_fruits[0] if veggies_fruits else (others[0] if others else "Fresh Herb")
@@ -195,32 +201,32 @@ def generate_fallback_recipe(
     time_match = re.search(r"(\d+)\s*(?:min|mins|minute|minutes)", prompt_lower)
     cook_time = f"{time_match.group(1)} mins" if time_match else ("15 mins" if is_quick else "20 mins")
 
-    spice_prefix = "Spiced " if is_spicy else ("Savory " if meal_type.lower() != "snack" else "Crispy ")
+    spice_prefix = "Spiced " if is_spicy else ("Savory " if "snack" not in meal_type.lower() else "Crispy ")
     method_style = "Skillet " if (no_oven or "skillet" in prompt_lower) else ("Quick " if is_quick else "Homestyle ")
 
     if meal_type.lower() == "breakfast":
         dish_title = f"{spice_prefix}{method_style}{lead_staple} & {lead_protein} Breakfast Bowl"
-        step1 = f"Prep: In a medium prep bowl, mix {lead_staple} with {lead_protein} and a splash of water or milk to form a uniform base."
-        step2 = f"Cook: Heat a non-stick skillet over medium-high heat with a dash of oil. Sauté {fresh_item} with {'a pinch of chili powder and turmeric' if is_spicy else 'light seasoning'} for 3-4 minutes until aromatic."
+        step1 = f"Prep: In a medium prep bowl, combine {lead_staple} with {lead_protein} and a splash of warm water to form a uniform base."
+        step2 = f"Cook: Heat a skillet over medium heat {fat_instruction}. Sauté {fresh_item} with {'a pinch of chili powder and turmeric' if is_spicy else 'light seasoning'} for 3-4 minutes until aromatic."
         step3 = f"Finish: Pour in the grain mixture and stir gently on stovetop for {cook_time} until golden and cooked through. Serve warm."
 
     elif meal_type.lower() == "lunch":
         dish_title = f"{spice_prefix}{lead_protein} & {lead_staple} Power Bowl with {fresh_item}"
         step1 = f"Prep: Rinse and simmer {lead_protein} and {lead_staple} in lightly salted water for 10-12 minutes until tender."
-        step2 = f"Sauté: In a separate pan on medium heat, toss {fresh_item} with {'cumin, chili, and cracked black pepper' if is_spicy else 'mild herbs and olive oil'} for 4 minutes."
+        step2 = f"Sauté: In a separate pan on medium heat {fat_instruction}, toss {fresh_item} with {'cumin, chili, and cracked black pepper' if is_spicy else 'mild aromatic herbs'} for 4 minutes."
         step3 = f"Assemble: Layer the cooked {lead_staple} and {lead_protein} into a bowl, top with seasoned {fresh_item}, and garnish with remaining ingredients."
 
     elif meal_type.lower() == "dinner":
         dish_title = f"{spice_prefix}Stovetop {lead_protein} Medley with {lead_staple} & Braised {fresh_item}"
-        step1 = f"Prep: Coarsely chop {fresh_item} and measure exact portions of {lead_staple} and {lead_protein}."
-        step2 = f"Simmer: Heat a skillet or sauce pot without oven. Sear {lead_protein} with {'crushed red peppers and warming spices' if is_spicy else 'aromatic spices'} for 5 minutes, then add {lead_staple} and 1/2 cup of broth."
+        step1 = f"Prep: Coarsely chop {fresh_item} and stage exact portions of {lead_staple} and {lead_protein}."
+        step2 = f"Simmer: Heat a skillet or sauce pot {fat_instruction}. Sear {lead_protein} with {'crushed red peppers and warming spices' if is_spicy else 'aromatic spices'} for 5 minutes, then add {lead_staple} and 1/2 cup of simmering water."
         step3 = f"Serve: Cover and simmer for {cook_time} until reduction forms a rich glaze. Fold in {fresh_item} and serve hot."
 
     else: # Snack
         dish_title = f"Artisan {lead_staple} & {fresh_item} Energy Crunch"
         step1 = f"Portion: Weigh and combine {', '.join(ingredients_summary)} in a serving bowl."
-        step2 = f"Toss: Lightly toast nuts/seeds in a dry pan for 2-3 minutes with {'a pinch of smoked paprika and sea salt' if is_spicy else 'cinnamon and sea salt'}."
-        step3 = f"Enjoy: Mix with the fruit/staple components and enjoy immediately as a nutrient-dense snack."
+        step2 = f"Toss: Lightly toast seeds or nuts in a dry pan for 2-3 minutes with {'a pinch of smoked paprika and sea salt' if is_spicy else 'cinnamon and sea salt'}."
+        step3 = f"Enjoy: Mix with the fruit and staple components and enjoy immediately as a nutrient-dense snack."
 
     return {
         "dish_title": dish_title,
@@ -262,7 +268,8 @@ def generate_recipe_for_meal(
         api_key=groq_api_key
     )
     if recipe:
-        recipe["engine"] = f"Groq ({PRIMARY_GROQ_MODEL})"
+        if "engine" not in recipe:
+            recipe["engine"] = f"Groq ({PRIMARY_GROQ_MODEL})"
         return recipe
 
     # 2. Heuristic fallback

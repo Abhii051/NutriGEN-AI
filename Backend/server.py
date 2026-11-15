@@ -81,7 +81,7 @@ class PlanGenerationRequest(BaseModel):
     )
     number_of_meals: int = Field(
         3,
-        ge=3,
+        ge=2,
         le=5,
         description="Number of main meals per day"
     )
