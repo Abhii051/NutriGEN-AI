@@ -6,23 +6,27 @@ Verifies:
 3. Zero duplicate food items across 2, 3, 4, and 5 meal structures
 4. SLSQP numerical convergence, bound enforcement, and error validation
 5. AI Chef recipe generation and post-generation allergen safety validation
+6. Demonstration of live/mocked LLM allergen hallucination rejection and automatic fallback
 """
 
 import sys
 import os
 import re
+import json
+import site
 import unittest
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 
-# Setup paths
+# Setup paths portably across environments
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# User site packages fallback
-py_user_site = Path(r"C:\Users\abhi\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages")
-if py_user_site.exists() and str(py_user_site) not in sys.path:
-    sys.path.append(str(py_user_site))
+# Portable site-packages resolution
+user_site = site.getusersitepackages()
+if isinstance(user_site, str) and os.path.exists(user_site) and user_site not in sys.path:
+    sys.path.append(user_site)
 
 from Backend.src.pipeline import run_nutrigen_pipeline
 from Backend.src.recipe_generator import validate_recipe_safety, generate_recipe_for_meal
@@ -170,6 +174,42 @@ class TestEndToEndAudit(unittest.TestCase):
                 # Ensure biological egg is not present (allow vegetable eggplant)
                 self.assertFalse(bool(re.search(r"\beggs?\b(?!plant)", desc)), f"Non-vegan egg found in {meal_name}: {desc}")
 
+    def test_profile_4_three_meals_maintenance_eggetarian(self):
+        """Profile 4: 30yo Female, 60kg, 3 meals (Breakfast, Lunch, Dinner), eggetarian, Mediterranean."""
+        payload = {
+            "age": 30,
+            "sex": "female",
+            "height_cm": 165.0,
+            "weight_kg": 60.0,
+            "activity_level": "moderate",
+            "goal": "maintenance",
+            "diet_type": "vegetarian",
+            "eats_eggs": True,
+            "cuisine": "mediterranean",
+            "number_of_meals": 3,
+            "number_of_snacks": 0
+        }
+
+        result = run_nutrigen_pipeline(payload)
+        self.assertEqual(result["status"], "success")
+
+        meals = result["meal_plan"]["meal_plan"]
+        self.assertEqual(len(meals), 3)
+        self.assertIn("Breakfast", meals)
+        self.assertIn("Lunch", meals)
+        self.assertIn("Dinner", meals)
+        self.assertNotIn("Snack", meals)
+
+        # Zero duplicates
+        fdc_ids = [item["fdc_id"] for meal_items in meals.values() for item in meal_items]
+        self.assertEqual(len(fdc_ids), len(set(fdc_ids)), "Found duplicate food IDs in 3-meal plan")
+
+        # Solver convergence and precision
+        opt = result["meal_plan"]["optimization"]
+        self.assertTrue(opt["solver_converged"])
+        self.assertTrue(opt["is_within_tolerance"])
+        self.assertLessEqual(opt["calorie_error_percent"], 5.0)
+
     def test_llm_recipe_safety_validation(self):
         """Verifies post-generation output validation catches hallucinated allergens."""
         # Safe recipe
@@ -211,6 +251,58 @@ class TestEndToEndAudit(unittest.TestCase):
             "chef_notes": "Standard"
         }
         self.assertFalse(validate_recipe_safety(unsafe_plural, ["tree nuts"]))
+
+    @patch("httpx.Client.post")
+    def test_live_groq_allergen_rejection_and_fallback(self, mock_post):
+        """
+        Demonstrates live/mocked LLM allergen hallucination rejection and automatic fallback:
+        When Groq returns a recipe containing a prohibited allergen (e.g. 'peanut'),
+        validate_recipe_safety detects the violation, rejects the LLM response,
+        and safely returns the deterministic heuristic fallback.
+        """
+        # Simulate Groq API returning a recipe that hallucinated an unallocated allergen (peanuts)
+        hallucinated_groq_response = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({
+                            "dish_title": "Sautéed Vegetable Medley with Peanut Crunch",
+                            "cooking_time": "15 mins",
+                            "instructions": [
+                                "Heat skillet and toss vegetables.",
+                                "Garnish with crushed roasted peanuts.",
+                                "Serve warm."
+                            ],
+                            "chef_notes": "Spicy and nutty"
+                        })
+                    }
+                }
+            ]
+        }
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = hallucinated_groq_response
+        mock_post.return_value = mock_resp
+
+        sample_foods = [
+            {"food": "Broccoli", "grams": 100, "calories": 34, "food_role": "vegetable"},
+            {"food": "Brown Rice", "grams": 80, "calories": 89, "food_role": "staple"}
+        ]
+
+        recipe = generate_recipe_for_meal(
+            meal_type="Dinner",
+            food_items=sample_foods,
+            allergies=["peanuts"],
+            groq_api_key="gsk_mock_test_key"
+        )
+
+        # Verify that the hallucinated LLM recipe was rejected and replaced by the safe heuristic engine
+        self.assertEqual(recipe["engine"], "Heuristic Recipe Engine")
+        self.assertNotIn("peanut", recipe["dish_title"].lower())
+        for step in recipe["instructions"]:
+            self.assertNotIn("peanut", step.lower())
+        self.assertIn("Allergen filter applied", recipe["chef_notes"])
 
 
 if __name__ == "__main__":
