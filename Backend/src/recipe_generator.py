@@ -70,10 +70,11 @@ def generate_recipe_with_groq(
     user_prompt: str = "",
     cuisine: str = "indian",
     diet_type: str = "vegetarian",
+    allergies: Optional[List[str]] = None,
     api_key: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
-    Call Groq API running Meta Llama 3.1 8B (llama-3.1-8b-instant).
+    Call Groq API running Meta Llama 3.3 70B / 3.1 8B with strict allergy & macro constraints.
     """
     groq_api_key = api_key or os.getenv("GROQ_API_KEY")
     if not groq_api_key or not groq_api_key.strip():
@@ -92,14 +93,18 @@ def generate_recipe_with_groq(
         "Create an appetizing, practical recipe that strictly incorporates the exact optimizer ingredients and gram portions. "
         "Strictly adhere to the user's custom cooking constraints (cooking time, heat/spice level, appliances, dietary restrictions). "
         "Do NOT add external unlisted ingredients (such as unallocated milk, oils, butter, or stock). Cooking water, salt, pepper, and dry spices are permitted. "
+        "NEVER suggest, include, or garnish with any allergen listed in the clinical allergy constraints. "
         "Output ONLY valid JSON with keys: 'dish_title' (string), 'cooking_time' (string), "
         "'instructions' (array of exactly 3 concise, chronological step strings), and 'chef_notes' (string)."
     )
+
+    allergy_warning = f"Clinical Allergies (STRICTLY PROHIBITED): {', '.join(allergies)}\n" if allergies else ""
 
     user_message = (
         f"Meal Category: {meal_type}\n"
         f"Cuisine Style: {cuisine}\n"
         f"Diet Type: {diet_type}\n"
+        f"{allergy_warning}"
         f"User Cooking Requests: {user_prompt or 'Standard healthy preparation'}\n\n"
         f"Exact Weighed Ingredients to use:\n{ingredients_text}\n\n"
         f"Return ONLY valid JSON with 'dish_title', 'cooking_time', 'instructions' (3 steps), and 'chef_notes'."
@@ -148,7 +153,8 @@ def generate_fallback_recipe(
     meal_type: str,
     food_items: List[Dict[str, Any]],
     user_prompt: str = "",
-    cuisine: str = "indian"
+    cuisine: str = "indian",
+    allergies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Intelligent heuristic fallback recipe generator.
@@ -242,11 +248,12 @@ def generate_recipe_for_meal(
     user_prompt: str = "",
     cuisine: str = "indian",
     diet_type: str = "vegetarian",
+    allergies: Optional[List[str]] = None,
     groq_api_key: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Main dispatch function:
-    1. Attempts Groq API (Meta Llama 3.1 8B)
+    1. Attempts Groq API (Meta Llama 3.3 70B / 3.1 8B)
     2. Falls back to OpenAI / Anthropic / Gemini if configured
     3. Falls back to smart heuristic recipe generator
     """
@@ -258,13 +265,14 @@ def generate_recipe_for_meal(
             "chef_notes": "Standard meal"
         }
 
-    # 1. Primary: Groq API with Meta Llama 3.1 8B
+    # 1. Primary: Groq API with Meta Llama
     recipe = generate_recipe_with_groq(
         meal_type=meal_type,
         food_items=food_items,
         user_prompt=user_prompt,
         cuisine=cuisine,
         diet_type=diet_type,
+        allergies=allergies,
         api_key=groq_api_key
     )
     if recipe:
@@ -277,7 +285,8 @@ def generate_recipe_for_meal(
         meal_type=meal_type,
         food_items=food_items,
         user_prompt=user_prompt,
-        cuisine=cuisine
+        cuisine=cuisine,
+        allergies=allergies
     )
     fallback["engine"] = "Heuristic Fallback Engine"
     return fallback

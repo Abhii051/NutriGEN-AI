@@ -306,10 +306,17 @@ def select_meal_plan_candidates(
         sub = sub.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
         for _, row in sub.iterrows():
             base = get_base_term(row["description"])
-            if base not in used_base_terms:
+            if base not in used_base_terms and row["fdc_id"] not in used_ids:
                 chosen = row
                 used_base_terms.add(base)
                 used_ids.add(chosen["fdc_id"])
+                return chosen
+
+        for _, row in sub.iterrows():
+            if row["fdc_id"] not in used_ids:
+                chosen = row
+                used_ids.add(chosen["fdc_id"])
+                used_base_terms.add(get_base_term(row["description"]))
                 return chosen
 
         chosen = sub.iloc[0]
@@ -322,24 +329,30 @@ def select_meal_plan_candidates(
             & (~df_pref["fdc_id"].isin(used_ids))
         ]
         if sub.empty:
-            sub = df_pref[df_pref["food_role"] == role]
+            sub = df_pref[~df_pref["fdc_id"].isin(used_ids)]
         if sub.empty:
             return None
 
         sub = sub.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
 
-        # Find first food whose base term hasn't been used yet
-        chosen = None
+        # Strict pass 1: Unique FDC ID and unique base ingredient term
         for _, row in sub.iterrows():
             base = get_base_term(row["description"])
-            if base not in used_base_terms:
+            if base not in used_base_terms and row["fdc_id"] not in used_ids:
                 chosen = row
                 used_base_terms.add(base)
-                break
+                used_ids.add(chosen["fdc_id"])
+                return chosen
 
-        if chosen is None:
-            chosen = sub.iloc[0]
+        # Strict pass 2: Any unique FDC ID not yet in the daily plan
+        for _, row in sub.iterrows():
+            if row["fdc_id"] not in used_ids:
+                chosen = row
+                used_ids.add(chosen["fdc_id"])
+                used_base_terms.add(get_base_term(row["description"]))
+                return chosen
 
+        chosen = sub.iloc[0]
         used_ids.add(chosen["fdc_id"])
         return chosen
 

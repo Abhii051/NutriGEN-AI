@@ -147,6 +147,7 @@ def run_nutrigen_pipeline(user_data: Dict[str, Any]) -> Dict[str, Any]:
             user_prompt=user_prompt,
             cuisine=cuisine,
             diet_type=diet_type,
+            allergies=allergies,
             groq_api_key=groq_api_key
         )
         recipes[meal_name] = recipe

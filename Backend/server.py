@@ -5,6 +5,7 @@ Includes CORS support and serves the modern frontend application.
 """
 
 import os
+import logging
 from pathlib import Path
 import sys
 from typing import List, Optional, Literal
@@ -31,11 +32,12 @@ app = FastAPI(
 # CORS configuration (Configurable via ALLOWED_ORIGINS environment variable)
 allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*")
 allowed_origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
+is_wildcard = allowed_origins == ["*"]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins if allowed_origins else ["*"],
-    allow_credentials=True,
+    allow_credentials=not is_wildcard,  # W3C CORS Spec: credentials must be False when origin is '*'
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -136,9 +138,10 @@ def generate_plan_endpoint(request: PlanGenerationRequest):
         ) from exc
 
     except Exception as exc:
+        logging.error("Unhandled error generating meal plan: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"An error occurred while generating the meal plan: {str(exc)}"
+            detail="An error occurred while generating the meal plan. Please verify your biometric parameters and try again."
         ) from exc
 
 
