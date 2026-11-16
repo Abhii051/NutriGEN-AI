@@ -1,6 +1,7 @@
 # Python cache files
 __pycache__/
 *.py[cod]
+*.pyc
 
 # Virtual environments
 venv/
@@ -9,8 +10,12 @@ venv/
 # Environment variables and secrets
 .env
 
+# ZIP files
+*.zip
+
 # Raw USDA source data
 data/raw/usda/
 data/raw/usda_sr_legacy/
+
 # Trained model artifacts
 models/
