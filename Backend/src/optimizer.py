@@ -254,18 +254,21 @@ def select_meal_plan_candidates(
     diet_type="vegetarian",
     number_of_meals=3,
     number_of_snacks=1,
+    exclude_fdc_ids=None,
+    variation_seed=0,
 ):
     """
     Selects distinct, high-quality candidate items for each meal slot.
     Guarantees that total selected foods are strictly <= MAX_FOODS (14)
     and enforces maximum ingredient variety (no repeating the same base ingredient).
+    Supports exclude_fdc_ids and variation_seed for generating alternative diverse plans.
     """
     df_pref = df_pref.copy()
     df_pref["food_role"] = df_pref.apply(assign_food_role, axis=1)
     df_pref = df_pref[df_pref["food_role"] != "other"].copy()
     df_pref["quality_score"] = df_pref.apply(lambda r: score_food_quality(r, diet_type=diet_type), axis=1)
 
-    used_ids = set()
+    used_ids = set(int(x) for x in (exclude_fdc_ids or []))
     used_base_terms = set()
 
     is_non_veg = ("non" in str(diet_type).lower())
@@ -304,6 +307,10 @@ def select_meal_plan_candidates(
             return get_best_food("protein")
 
         sub = sub.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
+        if variation_seed and variation_seed > 0 and len(sub) > 1:
+            top_k = min(len(sub), 6)
+            sub = pd.concat([sub.iloc[:top_k].sample(frac=1.0, random_state=int(variation_seed)), sub.iloc[top_k:]], ignore_index=True)
+
         for _, row in sub.iterrows():
             base = get_base_term(row["description"])
             if base not in used_base_terms and row["fdc_id"] not in used_ids:
@@ -339,6 +346,9 @@ def select_meal_plan_candidates(
             return None
 
         sub = sub.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
+        if variation_seed and variation_seed > 0 and len(sub) > 1:
+            top_k = min(len(sub), 8)
+            sub = pd.concat([sub.iloc[:top_k].sample(frac=1.0, random_state=int(variation_seed)), sub.iloc[top_k:]], ignore_index=True)
 
         # Strict pass 1: Unique FDC ID and unique base ingredient term
         for _, row in sub.iterrows():
@@ -384,6 +394,9 @@ def select_meal_plan_candidates(
             ]
             if not egg_sub.empty:
                 egg_sub = egg_sub.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
+                if variation_seed and variation_seed > 0 and len(egg_sub) > 1:
+                    top_k_egg = min(len(egg_sub), 4)
+                    egg_sub = pd.concat([egg_sub.iloc[:top_k_egg].sample(frac=1.0, random_state=int(variation_seed)), egg_sub.iloc[top_k_egg:]], ignore_index=True)
                 chosen_egg = egg_sub.iloc[0]
                 used_ids.add(chosen_egg["fdc_id"])
                 used_base_terms.add(get_base_term(chosen_egg["description"]))
@@ -704,9 +717,12 @@ def generate_meal_plan(
     eats_eggs=False,
     number_of_meals=3,
     number_of_snacks=1,
+    exclude_fdc_ids=None,
+    variation_seed=0,
 ):
     """
     Unified meal plan generator connecting Preferences, Candidate Selection, and SLSQP Optimizer.
+    Supports exclude_fdc_ids and variation_seed for regenerating alternative diverse plans.
     """
     # 1. Create and validate preferences
     preferences = create_preferences(
@@ -734,6 +750,8 @@ def generate_meal_plan(
         diet_type=diet_type,
         number_of_meals=number_of_meals,
         number_of_snacks=number_of_snacks,
+        exclude_fdc_ids=exclude_fdc_ids,
+        variation_seed=variation_seed,
     )
 
     if len(candidates_df) < 5:
@@ -766,6 +784,378 @@ def generate_meal_plan(
         "total_foods": len(candidates_df),
         "optimization": opt_metadata,
     }
+
+
+# =========================================================
+# 7. FOOD & MEAL SWAPPING ENGINE (Interactive Customization)
+# =========================================================
+
+def get_alternative_foods_for_item(
+    fdc_id,
+    diet_type="vegetarian",
+    cuisine="indian",
+    allergies=None,
+    disliked_foods=None,
+    eats_eggs=False,
+    exclude_fdc_ids=None,
+    limit=8,
+):
+    """
+    Finds verified alternative foods of the same functional role for a given food item.
+    Example: swapping a staple (rice) returns alternative wholesome staples (quinoa, oats, roti, etc.).
+    """
+    raw_df = load_dataset()
+    clean_df = remove_unsuitable_foods(raw_df)
+    preferences = create_preferences(
+        diet_type=diet_type,
+        eats_eggs=eats_eggs,
+        cuisine=cuisine,
+        allergies=allergies,
+        disliked_foods=disliked_foods
+    )
+    pref_df = apply_preferences(clean_df, preferences)
+    pref_df["food_role"] = pref_df.apply(assign_food_role, axis=1)
+
+    target_match = pref_df[pref_df["fdc_id"] == int(fdc_id)]
+    if target_match.empty:
+        target_match = clean_df[clean_df["fdc_id"] == int(fdc_id)]
+        role = assign_food_role(target_match.iloc[0]) if not target_match.empty else "staple"
+    else:
+        role = target_match.iloc[0]["food_role"]
+
+    excluded = set(int(x) for x in (exclude_fdc_ids or []))
+    excluded.add(int(fdc_id))
+
+    candidates = pref_df[
+        (pref_df["food_role"] == role) &
+        (~pref_df["fdc_id"].isin(excluded))
+    ].copy()
+
+    if candidates.empty:
+        candidates = pref_df[~pref_df["fdc_id"].isin(excluded)].copy()
+
+    candidates["quality_score"] = candidates.apply(lambda r: score_food_quality(r, diet_type=diet_type), axis=1)
+    candidates = candidates.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
+
+    results = []
+    seen_names = set()
+    for _, row in candidates.iterrows():
+        name = str(row["description"]).strip()
+        if name not in seen_names:
+            seen_names.add(name)
+            results.append({
+                "fdc_id": int(row["fdc_id"]),
+                "food": name,
+                "food_role": str(role),
+                "calories_per_100g": round(float(row["calories_kcal"]), 1),
+                "protein_per_100g": round(float(row["protein_g"]), 1),
+                "fat_per_100g": round(float(row["fat_g"]), 1),
+                "carbs_per_100g": round(float(row["carbohydrate_g"]), 1),
+            })
+            if len(results) >= limit:
+                break
+    return results
+
+
+def swap_food_in_plan(
+    current_plan,
+    targets,
+    fdc_id_to_replace,
+    replacement_fdc_id=None,
+    diet_type="vegetarian",
+    cuisine="indian",
+    allergies=None,
+    disliked_foods=None,
+    eats_eggs=False,
+):
+    """
+    Replaces a single food item in an active meal plan with an alternative of the same role,
+    re-runs SLSQP optimization across all daily items so total calories and macros stay balanced,
+    and returns the updated plan.
+    """
+    fdc_id_to_replace = int(fdc_id_to_replace)
+    meal_plan = current_plan.get("meal_plan", {})
+
+    target_meal = None
+    replaced_item = None
+    all_current_items = []
+
+    for meal_name, items in meal_plan.items():
+        for item in items:
+            all_current_items.append((meal_name, item))
+            if int(item["fdc_id"]) == fdc_id_to_replace:
+                target_meal = meal_name
+                replaced_item = item
+
+    if not replaced_item:
+        raise ValueError(f"Food item with ID {fdc_id_to_replace} not found in current meal plan.")
+
+    raw_df = load_dataset()
+    clean_df = remove_unsuitable_foods(raw_df)
+
+    if replacement_fdc_id is not None:
+        replacement_row = clean_df[clean_df["fdc_id"] == int(replacement_fdc_id)]
+        if replacement_row.empty:
+            raise ValueError(f"Replacement food with ID {replacement_fdc_id} not found.")
+        chosen_rep = replacement_row.iloc[0]
+    else:
+        current_ids = [int(it["fdc_id"]) for _, it in all_current_items]
+        alts = get_alternative_foods_for_item(
+            fdc_id=fdc_id_to_replace,
+            diet_type=diet_type,
+            cuisine=cuisine,
+            allergies=allergies,
+            disliked_foods=disliked_foods,
+            eats_eggs=eats_eggs,
+            exclude_fdc_ids=current_ids,
+            limit=1
+        )
+        if not alts:
+            raise ValueError("No eligible alternative food found to swap.")
+        rep_id = alts[0]["fdc_id"]
+        chosen_rep = clean_df[clean_df["fdc_id"] == rep_id].iloc[0]
+
+    new_candidate_rows = []
+    new_bounds = []
+    new_slot_info = []
+
+    role_bounds_map = {
+        "staple": (40.0, 200.0),
+        "protein": (40.0, 220.0),
+        "vegetable": (50.0, 300.0),
+        "fruit": (40.0, 200.0),
+        "healthy_fat": (10.0, 40.0),
+        "dairy": (40.0, 200.0),
+    }
+
+    for meal_name, item in all_current_items:
+        role = item.get("food_role", "staple")
+        b = role_bounds_map.get(role, (30.0, 200.0))
+        if int(item["fdc_id"]) == fdc_id_to_replace:
+            new_candidate_rows.append(chosen_rep)
+            new_bounds.append(b)
+            new_slot_info.append((meal_name, role))
+        else:
+            row_match = clean_df[clean_df["fdc_id"] == int(item["fdc_id"])]
+            if not row_match.empty:
+                new_candidate_rows.append(row_match.iloc[0])
+            else:
+                new_candidate_rows.append(pd.Series({
+                    "fdc_id": item["fdc_id"],
+                    "description": item["food"],
+                    "calories_kcal": item["calories"] / (item["grams"] / 100),
+                    "protein_g": item["protein_g"] / (item["grams"] / 100),
+                    "fat_g": item["fat_g"] / (item["grams"] / 100),
+                    "carbohydrate_g": item["carbs_g"] / (item["grams"] / 100),
+                }))
+            new_bounds.append(b)
+            new_slot_info.append((meal_name, role))
+
+    candidates_df = pd.DataFrame(new_candidate_rows).reset_index(drop=True)
+
+    quantities, opt_metadata = optimize_quantities(
+        candidates_df,
+        new_bounds,
+        target_calories=float(targets["calories"]),
+        target_protein=float(targets["protein_g"]),
+        target_fat=float(targets["fat_g"]),
+        target_carbs=float(targets["carbs_g"]),
+    )
+
+    new_meal_plan, new_totals = build_final_meal_plan(candidates_df, quantities, new_slot_info)
+
+    return {
+        "diet_type": diet_type,
+        "targets": targets,
+        "totals": new_totals,
+        "meal_plan": new_meal_plan,
+        "optimization": opt_metadata,
+        "swapped_meal": target_meal,
+        "replaced_fdc_id": fdc_id_to_replace,
+        "new_fdc_id": int(chosen_rep["fdc_id"]),
+        "new_food_name": str(chosen_rep["description"]),
+    }
+
+
+def swap_entire_meal_in_plan(
+    current_plan,
+    targets,
+    meal_name_to_swap,
+    diet_type="vegetarian",
+    cuisine="indian",
+    allergies=None,
+    disliked_foods=None,
+    eats_eggs=False,
+    variation_seed=1,
+):
+    """
+    Replaces all food items in a specific meal occasion (e.g. Lunch) with brand-new,
+    high-quality candidates of matching roles, re-runs SLSQP portion optimization,
+    and returns the refreshed plan.
+    """
+    raw_df = load_dataset()
+    clean_df = remove_unsuitable_foods(raw_df)
+    preferences = create_preferences(
+        diet_type=diet_type,
+        eats_eggs=eats_eggs,
+        cuisine=cuisine,
+        allergies=allergies,
+        disliked_foods=disliked_foods
+    )
+    pref_df = apply_preferences(clean_df, preferences)
+    pref_df["food_role"] = pref_df.apply(assign_food_role, axis=1)
+
+    meal_plan = current_plan.get("meal_plan", {})
+    if meal_name_to_swap not in meal_plan:
+        raise ValueError(f"Meal '{meal_name_to_swap}' not found in current meal plan.")
+
+    used_ids = set()
+    old_meal_ids = set()
+    for m_name, items in meal_plan.items():
+        for it in items:
+            if m_name == meal_name_to_swap:
+                old_meal_ids.add(int(it["fdc_id"]))
+            else:
+                used_ids.add(int(it["fdc_id"]))
+
+    used_ids.update(old_meal_ids)
+
+    new_meal_candidates = []
+    for item in meal_plan[meal_name_to_swap]:
+        role = item.get("food_role", "staple")
+        candidates = pref_df[
+            (pref_df["food_role"] == role) &
+            (~pref_df["fdc_id"].isin(used_ids))
+        ].copy()
+        if candidates.empty:
+            candidates = pref_df[~pref_df["fdc_id"].isin(used_ids)].copy()
+
+        candidates["quality_score"] = candidates.apply(lambda r: score_food_quality(r, diet_type=diet_type), axis=1)
+        candidates = candidates.sort_values(by=["quality_score", "calories_kcal"], ascending=[False, False])
+        if variation_seed and len(candidates) > 1:
+            top_k = min(len(candidates), 6)
+            candidates = pd.concat([candidates.iloc[:top_k].sample(frac=1.0, random_state=int(variation_seed)), candidates.iloc[top_k:]], ignore_index=True)
+
+        chosen = candidates.iloc[0]
+        used_ids.add(int(chosen["fdc_id"]))
+        new_meal_candidates.append(chosen)
+
+    new_candidate_rows = []
+    new_bounds = []
+    new_slot_info = []
+
+    role_bounds_map = {
+        "staple": (40.0, 200.0),
+        "protein": (40.0, 220.0),
+        "vegetable": (50.0, 300.0),
+        "fruit": (40.0, 200.0),
+        "healthy_fat": (10.0, 40.0),
+        "dairy": (40.0, 200.0),
+    }
+
+    for m_name, items in meal_plan.items():
+        if m_name == meal_name_to_swap:
+            for chosen in new_meal_candidates:
+                role = chosen["food_role"]
+                new_candidate_rows.append(chosen)
+                new_bounds.append(role_bounds_map.get(role, (30.0, 200.0)))
+                new_slot_info.append((m_name, role))
+        else:
+            for item in items:
+                role = item.get("food_role", "staple")
+                row_match = clean_df[clean_df["fdc_id"] == int(item["fdc_id"])]
+                if not row_match.empty:
+                    new_candidate_rows.append(row_match.iloc[0])
+                else:
+                    new_candidate_rows.append(pd.Series({
+                        "fdc_id": item["fdc_id"],
+                        "description": item["food"],
+                        "calories_kcal": item["calories"] / (item["grams"] / 100),
+                        "protein_g": item["protein_g"] / (item["grams"] / 100),
+                        "fat_g": item["fat_g"] / (item["grams"] / 100),
+                        "carbohydrate_g": item["carbs_g"] / (item["grams"] / 100),
+                    }))
+                new_bounds.append(role_bounds_map.get(role, (30.0, 200.0)))
+                new_slot_info.append((m_name, role))
+
+    candidates_df = pd.DataFrame(new_candidate_rows).reset_index(drop=True)
+
+    quantities, opt_metadata = optimize_quantities(
+        candidates_df,
+        new_bounds,
+        target_calories=float(targets["calories"]),
+        target_protein=float(targets["protein_g"]),
+        target_fat=float(targets["fat_g"]),
+        target_carbs=float(targets["carbs_g"]),
+    )
+
+    new_meal_plan, new_totals = build_final_meal_plan(candidates_df, quantities, new_slot_info)
+
+    return {
+        "diet_type": diet_type,
+        "targets": targets,
+        "totals": new_totals,
+        "meal_plan": new_meal_plan,
+        "optimization": opt_metadata,
+        "swapped_meal": meal_name_to_swap,
+    }
+
+
+def generate_multi_day_plan(
+    target_calories,
+    target_protein,
+    target_fat,
+    target_carbs,
+    diet_type="vegetarian",
+    allergies=None,
+    disliked_foods=None,
+    cuisine="indian",
+    eats_eggs=False,
+    number_of_meals=3,
+    number_of_snacks=1,
+    plan_days=3,
+    start_seed=0,
+):
+    """
+    Generates a consecutive multi-day plan (e.g. 3-day or 7-day) where each day has
+    distinct, rotating ingredients to prevent dietary fatigue.
+    """
+    days_result = []
+    cumulative_recent_ids = []
+
+    for d in range(1, plan_days + 1):
+        exclude_window = cumulative_recent_ids[-24:] if cumulative_recent_ids else []
+        day_seed = (start_seed or 0) + (d - 1) * 11 + 3
+
+        day_plan = generate_meal_plan(
+            target_calories=target_calories,
+            target_protein=target_protein,
+            target_fat=target_fat,
+            target_carbs=target_carbs,
+            diet_type=diet_type,
+            allergies=allergies,
+            disliked_foods=disliked_foods,
+            cuisine=cuisine,
+            eats_eggs=eats_eggs,
+            number_of_meals=number_of_meals,
+            number_of_snacks=number_of_snacks,
+            exclude_fdc_ids=exclude_window,
+            variation_seed=day_seed,
+        )
+
+        day_ids = [int(f["fdc_id"]) for items in day_plan["meal_plan"].values() for f in items]
+        cumulative_recent_ids.extend(day_ids)
+
+        days_result.append({
+            "day_number": d,
+            "day_label": f"Day {d}",
+            "meal_plan": day_plan["meal_plan"],
+            "totals": day_plan["totals"],
+            "total_foods": day_plan["total_foods"],
+            "optimization": day_plan["optimization"]
+        })
+
+    return days_result
 
 
 # =========================================================

@@ -300,6 +300,15 @@
                             </select>
                         </div>
 
+                        <div class="field">
+                            <label for="plan_days">Plan duration</label>
+                            <select id="plan_days">
+                                <option value="1" selected>1 Day (Standard Plan)</option>
+                                <option value="3">3 Days (Variety Cycle)</option>
+                                <option value="7">7 Days (Weekly Prep)</option>
+                            </select>
+                        </div>
+
                         <div class="field full-width">
                             <label for="allergies">Food allergies / intolerances <span class="optional-tag">Optional</span></label>
                             <input type="text" id="allergies" placeholder="e.g. Peanuts, lactose, shellfish (or leave blank)">
@@ -474,9 +483,28 @@
 </div>
 
 
+<!-- ===================================================================== -->
+<!-- MODAL: FOOD ITEM REPLACEMENT / SWAP                                   -->
+<!-- ===================================================================== -->
+<div id="swapModalBackdrop" class="modal-backdrop"></div>
+<div id="swapModal" class="swap-modal" role="dialog" aria-hidden="true">
+    <div class="modal-header">
+        <div>
+            <span class="section-tag">CUSTOMIZE DIET PLAN</span>
+            <h3 id="swapModalTitle">⇄ Swap Food Item</h3>
+            <p id="swapModalSubtitle">Select a nutritionally matched replacement. Portions re-optimize automatically.</p>
+        </div>
+        <button type="button" class="modal-close-btn" id="swapModalCloseBtn" aria-label="Close Swap Dialog">✕</button>
+    </div>
+    <div id="swapModalOriginal" class="swap-original-banner"></div>
+    <div id="swapModalBody" class="swap-modal-body">
+        <!-- Populated dynamically via JavaScript -->
+    </div>
+</div>
+
 <!-- PRINTABLE REPORT CONTAINER (Used exclusively during print) -->
 <div id="printableReport" class="print-only"></div>
 
-<script src="script.js?v=2.1"></script>
+<script src="script.js?v=2.3"></script>
 </body>
 </html>

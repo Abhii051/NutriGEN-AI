@@ -25,7 +25,13 @@ try:
 except ImportError:
     from src.ai_model import generate_nutrition_profile
 
-from Backend.src.optimizer import generate_meal_plan
+from Backend.src.optimizer import (
+    generate_meal_plan,
+    get_alternative_foods_for_item,
+    swap_food_in_plan,
+    swap_entire_meal_in_plan,
+    generate_multi_day_plan,
+)
 from Backend.src.recipe_generator import (
     generate_recipe_for_meal,
     generate_fallback_recipe,
@@ -106,6 +112,14 @@ def run_nutrigen_pipeline(user_data: Dict[str, Any]) -> Dict[str, Any]:
     raw_target_weight = user_data.get("target_weight_kg")
     target_weight_kg = float(raw_target_weight) if raw_target_weight not in [None, "", 0] else None
 
+    # Multi-day and regeneration parameters
+    exclude_fdc_ids = user_data.get("exclude_fdc_ids", [])
+    if isinstance(exclude_fdc_ids, str):
+        exclude_fdc_ids = [int(x.strip()) for x in exclude_fdc_ids.split(",") if x.strip().isdigit()]
+    variation_seed = int(user_data.get("variation_seed", 0))
+    plan_days = int(user_data.get("plan_days", 1))
+    plan_days = max(1, min(7, plan_days))
+
     # 2. Compute Biometrics & Nutritional Targets (Layer 1 Pratheek)
     profile = generate_nutrition_profile(
         age=age,
@@ -124,36 +138,88 @@ def run_nutrigen_pipeline(user_data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     # 3. Numerical Optimization Engine (Layer 2 Abhinav)
-    plan = generate_meal_plan(
-        target_calories=targets["calories"],
-        target_protein=targets["protein_g"],
-        target_fat=targets["fat_g"],
-        target_carbs=targets["carbs_g"],
-        diet_type=diet_type,
-        allergies=allergies,
-        disliked_foods=disliked_foods,
-        cuisine=cuisine,
-        eats_eggs=eats_eggs,
-        number_of_meals=number_of_meals,
-        number_of_snacks=number_of_snacks,
-    )
-
-    # 4. Generate Recipes for each meal via Groq Llama 3.1 (or fallback)
-    recipes = {}
-    for meal_name, items in plan["meal_plan"].items():
-        recipe = generate_recipe_for_meal(
-            meal_type=meal_name,
-            food_items=items,
-            user_prompt=user_prompt,
-            cuisine=cuisine,
+    if plan_days > 1:
+        multi_days = generate_multi_day_plan(
+            target_calories=targets["calories"],
+            target_protein=targets["protein_g"],
+            target_fat=targets["fat_g"],
+            target_carbs=targets["carbs_g"],
             diet_type=diet_type,
             allergies=allergies,
-            groq_api_key=groq_api_key
+            disliked_foods=disliked_foods,
+            cuisine=cuisine,
+            eats_eggs=eats_eggs,
+            number_of_meals=number_of_meals,
+            number_of_snacks=number_of_snacks,
+            plan_days=plan_days,
+            start_seed=variation_seed,
         )
-        recipes[meal_name] = recipe
+        for day_obj in multi_days:
+            day_recipes = {}
+            for m_name, items in day_obj["meal_plan"].items():
+                day_recipes[m_name] = generate_recipe_for_meal(
+                    meal_type=m_name,
+                    food_items=items,
+                    user_prompt=user_prompt,
+                    cuisine=cuisine,
+                    diet_type=diet_type,
+                    allergies=allergies,
+                    groq_api_key=groq_api_key
+                )
+            day_obj["recipes"] = day_recipes
 
-    # Attach recipes into the meal_plan object
-    plan["recipes"] = recipes
+        plan = {
+            "diet_type": diet_type,
+            "targets": targets,
+            "totals": multi_days[0]["totals"],
+            "meal_plan": multi_days[0]["meal_plan"],
+            "recipes": multi_days[0]["recipes"],
+            "optimization": multi_days[0]["optimization"],
+            "multi_day": True,
+            "total_days": plan_days,
+            "days": multi_days,
+        }
+    else:
+        plan = generate_meal_plan(
+            target_calories=targets["calories"],
+            target_protein=targets["protein_g"],
+            target_fat=targets["fat_g"],
+            target_carbs=targets["carbs_g"],
+            diet_type=diet_type,
+            allergies=allergies,
+            disliked_foods=disliked_foods,
+            cuisine=cuisine,
+            eats_eggs=eats_eggs,
+            number_of_meals=number_of_meals,
+            number_of_snacks=number_of_snacks,
+            exclude_fdc_ids=exclude_fdc_ids,
+            variation_seed=variation_seed,
+        )
+
+        recipes = {}
+        for meal_name, items in plan["meal_plan"].items():
+            recipe = generate_recipe_for_meal(
+                meal_type=meal_name,
+                food_items=items,
+                user_prompt=user_prompt,
+                cuisine=cuisine,
+                diet_type=diet_type,
+                allergies=allergies,
+                groq_api_key=groq_api_key
+            )
+            recipes[meal_name] = recipe
+
+        plan["recipes"] = recipes
+        plan["multi_day"] = False
+        plan["total_days"] = 1
+        plan["days"] = [{
+            "day_number": 1,
+            "day_label": "Day 1",
+            "meal_plan": plan["meal_plan"],
+            "recipes": plan["recipes"],
+            "totals": plan["totals"],
+            "optimization": plan["optimization"],
+        }]
 
     # 5. Calculate Clinical Biometrics & Target Projections
     bmi = round(weight_kg / ((height_cm / 100.0) ** 2), 1)
@@ -198,6 +264,7 @@ def run_nutrigen_pipeline(user_data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     # 6. Determine Effective Engine & Build Final Response Payload
+    recipes = plan.get("recipes", {})
     recipe_engines = [r.get("engine") for r in recipes.values() if r.get("engine")]
     effective_engine = recipe_engines[0] if recipe_engines else "Heuristic Precision Engine"
 
@@ -216,6 +283,141 @@ def run_nutrigen_pipeline(user_data: Dict[str, Any]) -> Dict[str, Any]:
         "meal_plan": plan,
         "recipes": recipes
     }
+
+
+def run_swap_item_pipeline(
+    user_data: Dict[str, Any],
+    current_plan: Dict[str, Any],
+    fdc_id_to_replace: int,
+    replacement_fdc_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Executes an item-level swap in the active meal plan and re-synthesizes the recipe.
+    """
+    targets = current_plan.get("targets", {})
+    if not targets:
+        profile = generate_nutrition_profile(
+            age=int(user_data.get("age", 22)),
+            weight_kg=float(user_data.get("weight_kg", 70.0)),
+            height_cm=float(user_data.get("height_cm", 175.0)),
+            sex=str(user_data.get("sex", "male")),
+            activity_level=str(user_data.get("activity_level", "moderate")),
+            goal=str(user_data.get("goal", "maintenance"))
+        )
+        targets = {
+            "calories": profile["calorie_target"],
+            "protein_g": profile["protein_g"],
+            "fat_g": profile["fat_g"],
+            "carbs_g": profile["carbs_g"],
+        }
+
+    raw_diet = str(user_data.get("diet_type", "vegetarian")).lower().strip().replace("_", "-")
+    diet_type = "non-vegetarian" if "non" in raw_diet else raw_diet
+    cuisine = str(user_data.get("cuisine", "indian")).lower().strip()
+    allergies = user_data.get("allergies", [])
+    if isinstance(allergies, str):
+        allergies = [a.strip() for a in allergies.split(",") if a.strip()]
+    disliked_foods = user_data.get("disliked_foods", [])
+    eats_eggs = bool(user_data.get("eats_eggs", False))
+
+    updated_plan = swap_food_in_plan(
+        current_plan=current_plan,
+        targets=targets,
+        fdc_id_to_replace=fdc_id_to_replace,
+        replacement_fdc_id=replacement_fdc_id,
+        diet_type=diet_type,
+        cuisine=cuisine,
+        allergies=allergies,
+        disliked_foods=disliked_foods,
+        eats_eggs=eats_eggs,
+    )
+
+    swapped_meal = updated_plan["swapped_meal"]
+    groq_api_key = user_data.get("groq_api_key") or os.getenv("GROQ_API_KEY")
+    user_prompt = str(user_data.get("user_prompt", "")).strip()
+
+    recipes = dict(current_plan.get("recipes", {}))
+    new_meal_items = updated_plan["meal_plan"].get(swapped_meal, [])
+    new_recipe = generate_recipe_for_meal(
+        meal_type=swapped_meal,
+        food_items=new_meal_items,
+        user_prompt=user_prompt,
+        cuisine=cuisine,
+        diet_type=diet_type,
+        allergies=allergies,
+        groq_api_key=groq_api_key
+    )
+    recipes[swapped_meal] = new_recipe
+    updated_plan["recipes"] = recipes
+
+    return updated_plan
+
+
+def run_swap_meal_pipeline(
+    user_data: Dict[str, Any],
+    current_plan: Dict[str, Any],
+    meal_name_to_swap: str,
+    variation_seed: int = 1,
+) -> Dict[str, Any]:
+    """
+    Executes a meal-level swap in the active meal plan and re-synthesizes the recipe.
+    """
+    targets = current_plan.get("targets", {})
+    if not targets:
+        profile = generate_nutrition_profile(
+            age=int(user_data.get("age", 22)),
+            weight_kg=float(user_data.get("weight_kg", 70.0)),
+            height_cm=float(user_data.get("height_cm", 175.0)),
+            sex=str(user_data.get("sex", "male")),
+            activity_level=str(user_data.get("activity_level", "moderate")),
+            goal=str(user_data.get("goal", "maintenance"))
+        )
+        targets = {
+            "calories": profile["calorie_target"],
+            "protein_g": profile["protein_g"],
+            "fat_g": profile["fat_g"],
+            "carbs_g": profile["carbs_g"],
+        }
+
+    raw_diet = str(user_data.get("diet_type", "vegetarian")).lower().strip().replace("_", "-")
+    diet_type = "non-vegetarian" if "non" in raw_diet else raw_diet
+    cuisine = str(user_data.get("cuisine", "indian")).lower().strip()
+    allergies = user_data.get("allergies", [])
+    if isinstance(allergies, str):
+        allergies = [a.strip() for a in allergies.split(",") if a.strip()]
+    disliked_foods = user_data.get("disliked_foods", [])
+    eats_eggs = bool(user_data.get("eats_eggs", False))
+
+    updated_plan = swap_entire_meal_in_plan(
+        current_plan=current_plan,
+        targets=targets,
+        meal_name_to_swap=meal_name_to_swap,
+        diet_type=diet_type,
+        cuisine=cuisine,
+        allergies=allergies,
+        disliked_foods=disliked_foods,
+        eats_eggs=eats_eggs,
+        variation_seed=variation_seed,
+    )
+
+    groq_api_key = user_data.get("groq_api_key") or os.getenv("GROQ_API_KEY")
+    user_prompt = str(user_data.get("user_prompt", "")).strip()
+
+    recipes = dict(current_plan.get("recipes", {}))
+    new_meal_items = updated_plan["meal_plan"].get(meal_name_to_swap, [])
+    new_recipe = generate_recipe_for_meal(
+        meal_type=meal_name_to_swap,
+        food_items=new_meal_items,
+        user_prompt=user_prompt,
+        cuisine=cuisine,
+        diet_type=diet_type,
+        allergies=allergies,
+        groq_api_key=groq_api_key
+    )
+    recipes[meal_name_to_swap] = new_recipe
+    updated_plan["recipes"] = recipes
+
+    return updated_plan
 
 
 if __name__ == "__main__":

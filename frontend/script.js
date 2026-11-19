@@ -39,8 +39,20 @@ const printGroceryBtn = document.getElementById("printGroceryBtn");
 const sidebarGroceryBtn = document.getElementById("sidebarGroceryBtn");
 const sidebarPrintBtn = document.getElementById("sidebarPrintBtn");
 
-// Current active plan state in memory
+// Swap Modal Elements
+const swapModal = document.getElementById("swapModal");
+const swapModalBackdrop = document.getElementById("swapModalBackdrop");
+const swapModalCloseBtn = document.getElementById("swapModalCloseBtn");
+const swapModalTitle = document.getElementById("swapModalTitle");
+const swapModalSubtitle = document.getElementById("swapModalSubtitle");
+const swapModalOriginal = document.getElementById("swapModalOriginal");
+const swapModalBody = document.getElementById("swapModalBody");
+
+// Current active plan & customization state in memory
 let currentActivePlan = null;
+let currentExcludedFdcIds = new Set();
+let currentVariationSeed = 1;
+let currentActiveDayIndex = 1;
 
 
 // ─── Utility Helpers ─────────────────────────────────────────────────────────
@@ -222,46 +234,50 @@ function getFormData() {
         diet: document.getElementById("diet").value || "vegetarian",
         cuisine: document.getElementById("cuisine").value || "indian",
         meals: Number(document.getElementById("meals").value) || 4,
+        plan_days: Number(document.getElementById("plan_days")?.value || 1),
         allergies: document.getElementById("allergies").value.trim(),
         user_prompt: document.getElementById("user_prompt").value.trim()
     };
 }
 
 function buildPayload(data) {
-    let diet_type = data.diet;
+    let diet_type = data.diet || data.diet_type || "vegetarian";
     let eats_eggs = false;
 
-    if (data.diet === "eggetarian") {
+    if (diet_type === "eggetarian") {
         diet_type = "vegetarian";
         eats_eggs = true;
-    } else if (data.diet === "non_vegetarian") {
+    } else if (diet_type === "non_vegetarian") {
         diet_type = "non-vegetarian";
     }
 
-    const sex = data.gender === "female" ? "female" : "male";
-    const totalMeals = Number(data.meals) || 4;
+    const sex = data.gender === "female" || data.sex === "female" ? "female" : "male";
+    const totalMeals = Number(data.meals || data.number_of_meals) || 4;
     const number_of_meals = totalMeals;
     const number_of_snacks = totalMeals === 4 ? 1 : (totalMeals === 5 ? 2 : 0);
 
     const allergies = data.allergies
-        ? data.allergies.split(",").map(s => s.trim()).filter(Boolean)
+        ? (Array.isArray(data.allergies) ? data.allergies : data.allergies.split(",").map(s => s.trim()).filter(Boolean))
         : [];
 
     return {
-        age: data.age,
+        age: Number(data.age),
         sex: sex,
-        height_cm: data.height,
-        weight_kg: data.weight,
-        target_weight_kg: data.target_weight,
-        activity_level: data.activity,
-        goal: data.goal,
+        height_cm: Number(data.height || data.height_cm),
+        weight_kg: Number(data.weight || data.weight_kg),
+        target_weight_kg: data.target_weight || data.target_weight_kg || null,
+        activity_level: data.activity || data.activity_level || "moderate",
+        goal: data.goal || "maintenance",
         diet_type: diet_type,
         eats_eggs: eats_eggs,
         allergies: allergies,
-        cuisine: data.cuisine,
+        cuisine: data.cuisine || "indian",
         number_of_meals: number_of_meals,
         number_of_snacks: number_of_snacks,
-        user_prompt: data.user_prompt || ""
+        user_prompt: data.user_prompt || "",
+        plan_days: Number(data.plan_days || 1),
+        variation_seed: Number(data.variation_seed || 1),
+        exclude_fdc_ids: Array.isArray(data.exclude_fdc_ids) ? data.exclude_fdc_ids : []
     };
 }
 
@@ -321,13 +337,33 @@ function getServingHint(foodName, grams) {
 // ─── Render Complete Meal Plan on Screen ─────────────────────────────────────
 
 function displayMealPlan(response, optionalUserData = null) {
-    mealResults.replaceChildren();
     currentActivePlan = { response, user: optionalUserData || getFormData() };
+    currentActiveDayIndex = 1;
+    renderCurrentPlanView();
+}
 
+function renderCurrentPlanView() {
+    mealResults.replaceChildren();
+    if (!currentActivePlan || !currentActivePlan.response) return;
+
+    const response = currentActivePlan.response;
+    const optionalUserData = currentActivePlan.user;
     const nr = response.nutrition_requirements || {};
     const mp = response.meal_plan || {};
-    const totals = mp.totals || {};
-    const bio = response.biometrics || {};
+    const isMultiDay = Array.isArray(mp.days) && mp.days.length > 1;
+
+    // Resolve active day data
+    let activeMealPlanData = mp.meal_plan || {};
+    let activeTotals = mp.totals || {};
+    let activeRecipesData = response.recipes || mp.recipes || {};
+
+    if (isMultiDay) {
+        const dayIdx = Math.max(0, Math.min(mp.days.length - 1, currentActiveDayIndex - 1));
+        const dayObj = mp.days[dayIdx] || mp.days[0];
+        activeMealPlanData = dayObj.meal_plan || {};
+        activeTotals = dayObj.totals || {};
+        activeRecipesData = dayObj.recipes || activeRecipesData;
+    }
 
     // 1. Action Toolbar
     const toolbar = el("div", "results-toolbar");
@@ -339,8 +375,14 @@ function displayMealPlan(response, optionalUserData = null) {
     const groceryBtn = el("button", "tool-action-btn", "🛒 View Grocery List");
     groceryBtn.addEventListener("click", () => openGroceryModal(currentActivePlan));
 
+    // Option A: Full Plan Regeneration Button
+    const regenBtn = el("button", "tool-action-btn btn-regenerate-alt", "🔄 Regenerate Alternative Plan");
+    regenBtn.title = "Generate a completely fresh diet plan with zero duplicate ingredients";
+    regenBtn.addEventListener("click", () => handleRegenerateAlternative(regenBtn));
+
     leftGroup.appendChild(printBtn);
     leftGroup.appendChild(groceryBtn);
+    leftGroup.appendChild(regenBtn);
 
     // Quick Cuisine Switcher Pills
     const rightGroup = el("div", "toolbar-group");
@@ -371,12 +413,32 @@ function displayMealPlan(response, optionalUserData = null) {
     toolbar.appendChild(rightGroup);
     mealResults.appendChild(toolbar);
 
+    // Option C: Multi-Day Variety Tabs
+    if (isMultiDay) {
+        const tabsContainer = el("div", "day-tabs-container");
+        const tabsLabel = el("div", "day-tabs-label", "📅 Multi-Day Variety Plan:");
+        const tabBar = el("div", "day-tab-bar");
+
+        mp.days.forEach((dayObj, idx) => {
+            const dayNum = idx + 1;
+            const dayCal = Math.round(dayObj.totals?.calories || nr.calories || 2000);
+            const tabBtn = el("button", `day-tab-btn ${dayNum === currentActiveDayIndex ? 'active' : ''}`, `Day ${dayNum} (${dayCal} kcal)`);
+            tabBtn.addEventListener("click", () => {
+                currentActiveDayIndex = dayNum;
+                renderCurrentPlanView();
+            });
+            tabBar.appendChild(tabBtn);
+        });
+
+        tabsContainer.appendChild(tabsLabel);
+        tabsContainer.appendChild(tabBar);
+        mealResults.appendChild(tabsContainer);
+    }
 
     // 2. Optimization Precision & Macro Energy Distribution Card
     const targetCal = Number(nr.calories) || 1;
-    const actualCal = Number(totals.calories) || 0;
+    const actualCal = Number(activeTotals.calories) || 0;
     const variancePercent = Math.abs((actualCal - targetCal) / targetCal) * 100;
-    // Un-inflated, authentic mathematical accuracy calculation
     const rawAccuracy = 100 - variancePercent;
     const accuracyScore = Math.max(0, Math.min(100, rawAccuracy)).toFixed(1);
 
@@ -397,7 +459,7 @@ function displayMealPlan(response, optionalUserData = null) {
                 <div class="mcc-icon">🔥</div>
                 <div class="mcc-label">Calories</div>
                 <div class="mcc-values">
-                    <div class="mcc-actual">${fmt(totals.calories, 0)} <small>kcal</small></div>
+                    <div class="mcc-actual">${fmt(activeTotals.calories, 0)} <small>kcal</small></div>
                     <div class="mcc-target">Target: ${fmt(nr.calories, 0)} kcal</div>
                 </div>
                 <span class="mcc-diff ${variancePercent < 3 ? 'diff-match' : 'diff-close'}">
@@ -409,58 +471,55 @@ function displayMealPlan(response, optionalUserData = null) {
                 <div class="mcc-icon">💪</div>
                 <div class="mcc-label">Protein</div>
                 <div class="mcc-values">
-                    <div class="mcc-actual">${fmt(totals.protein_g, 1)}g</div>
+                    <div class="mcc-actual">${fmt(activeTotals.protein_g, 1)}g</div>
                     <div class="mcc-target">Target: ${fmt(nr.protein_g, 1)}g</div>
                 </div>
-                <span class="mcc-diff diff-match">${Math.round((totals.protein_g * 4 / totals.calories) * 100)}% of energy</span>
+                <span class="mcc-diff diff-match">${Math.round((activeTotals.protein_g * 4 / (activeTotals.calories || 1)) * 100)}% of energy</span>
             </div>
 
             <div class="macro-comp-card">
                 <div class="mcc-icon">🌾</div>
                 <div class="mcc-label">Carbohydrates</div>
                 <div class="mcc-values">
-                    <div class="mcc-actual">${fmt(totals.carbs_g, 1)}g</div>
+                    <div class="mcc-actual">${fmt(activeTotals.carbs_g, 1)}g</div>
                     <div class="mcc-target">Target: ${fmt(nr.carbs_g, 1)}g</div>
                 </div>
-                <span class="mcc-diff diff-match">${Math.round((totals.carbs_g * 4 / totals.calories) * 100)}% of energy</span>
+                <span class="mcc-diff diff-match">${Math.round((activeTotals.carbs_g * 4 / (activeTotals.calories || 1)) * 100)}% of energy</span>
             </div>
 
             <div class="macro-comp-card">
                 <div class="mcc-icon">🥑</div>
                 <div class="mcc-label">Healthy Fats</div>
                 <div class="mcc-values">
-                    <div class="mcc-actual">${fmt(totals.fat_g, 1)}g</div>
+                    <div class="mcc-actual">${fmt(activeTotals.fat_g, 1)}g</div>
                     <div class="mcc-target">Target: ${fmt(nr.fat_g, 1)}g</div>
                 </div>
-                <span class="mcc-diff diff-match">${Math.round((totals.fat_g * 9 / totals.calories) * 100)}% of energy</span>
+                <span class="mcc-diff diff-match">${Math.round((activeTotals.fat_g * 9 / (activeTotals.calories || 1)) * 100)}% of energy</span>
             </div>
         </div>
 
         <div class="macro-ratio-container">
             <div class="mrc-title-row">
                 <span>MACRONUTRIENT CALORIC RATIO (4:4:9 kcal/g)</span>
-                <span>Total: ${fmt(totals.calories, 0)} kcal</span>
+                <span>Total: ${fmt(activeTotals.calories, 0)} kcal</span>
             </div>
             <div class="macro-split-bar">
-                <div class="split-protein" style="width: ${(totals.protein_g * 4 / totals.calories * 100).toFixed(1)}%;"></div>
-                <div class="split-carbs" style="width: ${(totals.carbs_g * 4 / totals.calories * 100).toFixed(1)}%;"></div>
-                <div class="split-fat" style="width: ${(totals.fat_g * 9 / totals.calories * 100).toFixed(1)}%;"></div>
+                <div class="split-protein" style="width: ${(activeTotals.protein_g * 4 / (activeTotals.calories || 1) * 100).toFixed(1)}%;"></div>
+                <div class="split-carbs" style="width: ${(activeTotals.carbs_g * 4 / (activeTotals.calories || 1) * 100).toFixed(1)}%;"></div>
+                <div class="split-fat" style="width: ${(activeTotals.fat_g * 9 / (activeTotals.calories || 1) * 100).toFixed(1)}%;"></div>
             </div>
             <div class="mrc-legend">
-                <span><span class="legend-dot" style="background: #e06d53;"></span> Protein (${(totals.protein_g * 4 / totals.calories * 100).toFixed(0)}%)</span>
-                <span><span class="legend-dot" style="background: #468ca8;"></span> Carbs (${(totals.carbs_g * 4 / totals.calories * 100).toFixed(0)}%)</span>
-                <span><span class="legend-dot" style="background: #e5b33d;"></span> Fat (${(totals.fat_g * 9 / totals.calories * 100).toFixed(0)}%)</span>
+                <span><span class="legend-dot" style="background: #e06d53;"></span> Protein (${(activeTotals.protein_g * 4 / (activeTotals.calories || 1) * 100).toFixed(0)}%)</span>
+                <span><span class="legend-dot" style="background: #468ca8;"></span> Carbs (${(activeTotals.carbs_g * 4 / (activeTotals.calories || 1) * 100).toFixed(0)}%)</span>
+                <span><span class="legend-dot" style="background: #e5b33d;"></span> Fat (${(activeTotals.fat_g * 9 / (activeTotals.calories || 1) * 100).toFixed(0)}%)</span>
             </div>
         </div>
     `;
     mealResults.appendChild(optCard);
 
-
     // 3. Render Per-Meal Cards
-    const mealPlanData = mp.meal_plan || {};
-    const recipesData = response.recipes || mp.recipes || {};
     const preferredOrder = ["Breakfast", "Morning Snack", "Lunch", "Evening Snack", "Dinner", "Snack"];
-    const allMealKeys = Object.keys(mealPlanData);
+    const allMealKeys = Object.keys(activeMealPlanData);
     const mealOrder = [
         ...preferredOrder.filter(m => allMealKeys.includes(m)),
         ...allMealKeys.filter(m => !preferredOrder.includes(m))
@@ -478,16 +537,29 @@ function displayMealPlan(response, optionalUserData = null) {
     };
 
     mealOrder.forEach(mealName => {
-        const foods = mealPlanData[mealName];
+        const foods = activeMealPlanData[mealName];
         if (!foods || foods.length === 0) return;
 
-        const recipe = recipesData[mealName] || {};
+        const recipe = activeRecipesData[mealName] || {};
         const card = el("div", "meal-card-full");
 
         const header = el("div", "meal-card-header");
         const nameRow = el("div", "meal-name-row");
-        nameRow.appendChild(el("span", "meal-emoji", mealEmojis[mealName] || "🍽️"));
-        nameRow.appendChild(el("span", "meal-name", mealName));
+
+        const leftNameGroup = el("div", "");
+        leftNameGroup.style.display = "flex";
+        leftNameGroup.style.alignItems = "center";
+        leftNameGroup.style.gap = "8px";
+        leftNameGroup.appendChild(el("span", "meal-emoji", mealEmojis[mealName] || "🍽️"));
+        leftNameGroup.appendChild(el("span", "meal-name", mealName));
+        nameRow.appendChild(leftNameGroup);
+
+        // Option B: Swap Entire Meal Button
+        const swapMealBtn = el("button", "btn-swap-meal", "🔁 Swap Meal");
+        swapMealBtn.title = `Regenerate all dishes in ${mealName} with fresh ingredients`;
+        swapMealBtn.addEventListener("click", () => executeMealSwap(mealName, swapMealBtn));
+        nameRow.appendChild(swapMealBtn);
+
         header.appendChild(nameRow);
 
         if (recipe.dish_title) {
@@ -498,7 +570,7 @@ function displayMealPlan(response, optionalUserData = null) {
         }
         card.appendChild(header);
 
-        // Foods Table with pixel-perfect column alignment
+        // Foods Table with Swap Action Column
         const tableWrap = el("div", "meal-table-wrap");
         const table = el("table", "meal-food-table");
 
@@ -511,6 +583,7 @@ function displayMealPlan(response, optionalUserData = null) {
                 <th class="col-num">Protein</th>
                 <th class="col-num">Carbs</th>
                 <th class="col-num">Fat</th>
+                <th class="col-swap">Swap</th>
             </tr>
         `;
         table.appendChild(thead);
@@ -540,12 +613,20 @@ function displayMealPlan(response, optionalUserData = null) {
             const tdCarb = el("td", "col-num col-macro", `${fmt(f.carbs_g, 1)}g`);
             const tdFat = el("td", "col-num col-macro", `${fmt(f.fat_g, 1)}g`);
 
+            // Option B: Single Food Swap Button
+            const tdSwap = el("td", "col-swap");
+            const swapFoodBtn = el("button", "btn-swap-food", "⇄ Swap");
+            swapFoodBtn.title = `Swap ${mainTitle} with a nutritionally equivalent food`;
+            swapFoodBtn.addEventListener("click", () => openSwapFoodModal(f, mealName));
+            tdSwap.appendChild(swapFoodBtn);
+
             tr.appendChild(tdFood);
             tr.appendChild(tdQty);
             tr.appendChild(tdCal);
             tr.appendChild(tdProt);
             tr.appendChild(tdCarb);
             tr.appendChild(tdFat);
+            tr.appendChild(tdSwap);
             tbody.appendChild(tr);
         });
         table.appendChild(tbody);
@@ -562,7 +643,7 @@ function displayMealPlan(response, optionalUserData = null) {
             recipe.instructions.forEach((step, i) => {
                 const s = el("div", "recipe-step");
                 const num = el("span", "step-num", String(i + 1));
-                const text = el("span", "", String(step)); // Safe textContent avoids XSS
+                const text = el("span", "", String(step));
                 s.appendChild(num);
                 s.appendChild(text);
                 drawer.appendChild(s);
@@ -588,6 +669,341 @@ function displayMealPlan(response, optionalUserData = null) {
 
     mealResults.appendChild(mealsGrid);
 }
+
+
+// ─── Plan Customization & Interactive Swapping Engines ───────────────────────
+
+function collectAllFdcIds(response) {
+    const ids = [];
+    if (!response || !response.meal_plan) return ids;
+    const mp = response.meal_plan;
+    if (mp.days && Array.isArray(mp.days)) {
+        mp.days.forEach(d => {
+            if (d.meal_plan) {
+                Object.values(d.meal_plan).forEach(foods => {
+                    if (Array.isArray(foods)) {
+                        foods.forEach(f => { if (f.fdc_id) ids.push(Number(f.fdc_id)); });
+                    }
+                });
+            }
+        });
+    }
+    if (mp.meal_plan) {
+        Object.values(mp.meal_plan).forEach(foods => {
+            if (Array.isArray(foods)) {
+                foods.forEach(f => { if (f.fdc_id) ids.push(Number(f.fdc_id)); });
+            }
+        });
+    }
+    return Array.from(new Set(ids));
+}
+
+function getActiveDayMealPlan() {
+    if (!currentActivePlan || !currentActivePlan.response) return {};
+    const mp = currentActivePlan.response.meal_plan;
+    if (mp.days && Array.isArray(mp.days) && mp.days.length > 0) {
+        const dayIdx = Math.max(0, Math.min(mp.days.length - 1, currentActiveDayIndex - 1));
+        const dayObj = mp.days[dayIdx] || mp.days[0];
+        return {
+            meal_plan: dayObj.meal_plan,
+            totals: dayObj.totals,
+            status: "Optimal"
+        };
+    }
+    return mp;
+}
+
+function updateActiveDayMealPlan(updatedMealPlan, updatedRecipes) {
+    if (!currentActivePlan || !currentActivePlan.response) return;
+    const mp = currentActivePlan.response.meal_plan;
+    if (mp.days && Array.isArray(mp.days) && mp.days.length > 0) {
+        const dayIdx = Math.max(0, Math.min(mp.days.length - 1, currentActiveDayIndex - 1));
+        if (mp.days[dayIdx]) {
+            mp.days[dayIdx].meal_plan = updatedMealPlan.meal_plan;
+            mp.days[dayIdx].totals = updatedMealPlan.totals;
+            if (updatedRecipes) {
+                mp.days[dayIdx].recipes = Object.assign(mp.days[dayIdx].recipes || {}, updatedRecipes);
+            }
+        }
+    }
+    if (currentActiveDayIndex === 1 || !mp.days) {
+        currentActivePlan.response.meal_plan.meal_plan = updatedMealPlan.meal_plan;
+        currentActivePlan.response.meal_plan.totals = updatedMealPlan.totals;
+        if (updatedRecipes) {
+            currentActivePlan.response.recipes = Object.assign(currentActivePlan.response.recipes || {}, updatedRecipes);
+        }
+    }
+}
+
+// Option A Handler: Full Plan Regeneration
+async function handleRegenerateAlternative(btnElement) {
+    if (!currentActivePlan || !currentActivePlan.response) return;
+
+    const existingIds = collectAllFdcIds(currentActivePlan.response);
+    existingIds.forEach(id => currentExcludedFdcIds.add(id));
+    currentVariationSeed += 1;
+
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.innerHTML = "<span>⏳</span> Solving Alternative Plan…";
+    }
+
+    try {
+        const user = currentActivePlan.user;
+        const payload = buildPayload(user);
+        payload.exclude_fdc_ids = Array.from(currentExcludedFdcIds);
+        payload.variation_seed = currentVariationSeed;
+        payload.plan_days = Number(user.plan_days || document.getElementById("plan_days")?.value || 1);
+
+        const res = await fetch("/api/plan/regenerate-alternative", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "Could not generate alternative plan.");
+        }
+
+        const result = await res.json();
+        savePlanToHistory(payload, result);
+        displayMealPlan(result, user);
+    } catch (err) {
+        alert("Alternative plan generation failed: " + err.message);
+    } finally {
+        if (btnElement) {
+            btnElement.disabled = false;
+            btnElement.innerHTML = "<span>🔄</span> Regenerate Alternative Plan";
+        }
+    }
+}
+
+// Option B Handler: Swap Entire Meal
+async function executeMealSwap(mealName, btnElement) {
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.textContent = "⏳ Swapping…";
+    }
+
+    try {
+        const user = currentActivePlan.user;
+        const activeDayPlan = getActiveDayMealPlan();
+        const targets = currentActivePlan.response.nutrition_requirements || {};
+        currentVariationSeed += 1;
+
+        const allergies = user.allergies
+            ? (Array.isArray(user.allergies) ? user.allergies : user.allergies.split(",").map(s => s.trim()).filter(Boolean))
+            : [];
+
+        const payload = {
+            current_plan: activeDayPlan,
+            targets: {
+                calories: Number(targets.calories) || 2000,
+                protein_g: Number(targets.protein_g) || 100,
+                carbs_g: Number(targets.carbs_g) || 250,
+                fat_g: Number(targets.fat_g) || 60
+            },
+            meal_name: mealName,
+            cuisine: user.cuisine || "indian",
+            diet_type: user.diet || user.diet_type || "vegetarian",
+            user_prompt: user.user_prompt || "",
+            allergies: allergies,
+            variation_seed: currentVariationSeed
+        };
+
+        const res = await fetch("/api/plan/swap-meal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "Meal swap failed.");
+        }
+
+        const data = await res.json();
+        updateActiveDayMealPlan(data.meal_plan, data.recipes);
+        renderCurrentPlanView();
+    } catch (err) {
+        alert("Could not swap meal: " + err.message);
+        if (btnElement) {
+            btnElement.disabled = false;
+            btnElement.textContent = "🔁 Swap Meal";
+        }
+    }
+}
+
+// Option B Handler: Food Item Swap Modal & Execution
+async function openSwapFoodModal(foodItem, mealName) {
+    if (!foodItem || !foodItem.fdc_id) {
+        alert("Cannot swap this food item: identifier missing.");
+        return;
+    }
+    const user = currentActivePlan?.user || getFormData();
+    if (swapModalTitle) swapModalTitle.textContent = `⇄ Swap: ${foodItem.food.split(",")[0]}`;
+    if (swapModalSubtitle) swapModalSubtitle.textContent = `Select a nutritionally matched replacement for ${mealName}. Portions will re-optimize automatically.`;
+
+    if (swapModalOriginal) {
+        swapModalOriginal.innerHTML = `
+            <div>
+                <strong>Current item:</strong> ${escapeHtml(foodItem.food)}
+            </div>
+            <div style="display: flex; gap: 8px; font-weight: 600;">
+                <span>${fmt(foodItem.grams, 0)}g</span>
+                <span>· ${fmt(foodItem.calories, 0)} kcal</span>
+                <span>· ${fmt(foodItem.protein_g, 1)}g P</span>
+                <span>· ${fmt(foodItem.carbs_g, 1)}g C</span>
+                <span>· ${fmt(foodItem.fat_g, 1)}g F</span>
+            </div>
+        `;
+    }
+
+    if (swapModalBody) {
+        swapModalBody.replaceChildren();
+        const loader = el("div", "loader-box");
+        loader.innerHTML = `
+            <div class="loader-spinner"></div>
+            <p>Finding nutritionally compatible alternatives…</p>
+        `;
+        swapModalBody.appendChild(loader);
+    }
+
+    if (swapModal) {
+        swapModal.classList.add("active");
+        swapModal.setAttribute("aria-hidden", "false");
+    }
+    if (swapModalBackdrop) {
+        swapModalBackdrop.classList.add("active");
+    }
+
+    try {
+        const allergies = user.allergies
+            ? (Array.isArray(user.allergies) ? user.allergies : user.allergies.split(",").map(s => s.trim()).filter(Boolean))
+            : [];
+
+        const payload = {
+            fdc_id: Number(foodItem.fdc_id),
+            diet_type: user.diet || user.diet_type || "vegetarian",
+            cuisine: user.cuisine || "indian",
+            allergies: allergies,
+            limit: 6
+        };
+
+        const res = await fetch("/api/plan/alternatives", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error("Could not fetch alternative foods.");
+        const data = await res.json();
+        const alts = data.alternatives || [];
+        renderAlternativeList(foodItem, alts, mealName);
+    } catch (err) {
+        swapModalBody.innerHTML = `
+            <div class="error-box">
+                <p>Could not load alternatives: ${escapeHtml(err.message)}</p>
+            </div>
+        `;
+    }
+}
+
+function renderAlternativeList(originalFood, alternatives, mealName) {
+    swapModalBody.replaceChildren();
+    if (alternatives.length === 0) {
+        swapModalBody.innerHTML = `
+            <div style="text-align: center; padding: 30px; color: var(--muted);">
+                <p>No compatible alternatives found matching the current diet and allergen filters.</p>
+            </div>
+        `;
+        return;
+    }
+
+    alternatives.forEach(alt => {
+        const card = el("div", "alt-food-card");
+        const parts = (alt.food || "").split(",");
+        const mainTitle = parts[0].trim();
+        const sub = parts.slice(1).join(",").trim();
+
+        const info = el("div", "alt-food-info");
+        info.innerHTML = `
+            <div class="alt-food-title">${escapeHtml(mainTitle)} ${sub ? `<small style="font-weight: normal; color: #777;">(${escapeHtml(sub)})</small>` : ''}</div>
+            <div class="alt-food-macros">
+                <span class="alt-macro-pill">🔥 ${fmt(alt.calories_per_100g, 0)} kcal/100g</span>
+                <span class="alt-macro-pill">💪 ${fmt(alt.protein_g, 1)}g P</span>
+                <span class="alt-macro-pill">🌾 ${fmt(alt.carbs_g, 1)}g C</span>
+                <span class="alt-macro-pill">🥑 ${fmt(alt.fat_g, 1)}g F</span>
+            </div>
+        `;
+
+        const selectBtn = el("button", "btn-select-swap", "⇄ Select & Recalculate");
+        selectBtn.addEventListener("click", async () => {
+            selectBtn.disabled = true;
+            selectBtn.textContent = "⏳ Optimizing…";
+            await executeFoodSwap(originalFood.fdc_id, alt.fdc_id, mealName);
+        });
+
+        card.appendChild(info);
+        card.appendChild(selectBtn);
+        swapModalBody.appendChild(card);
+    });
+}
+
+async function executeFoodSwap(fdcIdToReplace, replacementFdcId, mealName) {
+    try {
+        const user = currentActivePlan.user;
+        const activeDayPlan = getActiveDayMealPlan();
+        const targets = currentActivePlan.response.nutrition_requirements || {};
+
+        const payload = {
+            current_plan: activeDayPlan,
+            targets: {
+                calories: Number(targets.calories) || 2000,
+                protein_g: Number(targets.protein_g) || 100,
+                carbs_g: Number(targets.carbs_g) || 250,
+                fat_g: Number(targets.fat_g) || 60
+            },
+            fdc_id_to_replace: Number(fdcIdToReplace),
+            replacement_fdc_id: Number(replacementFdcId),
+            cuisine: user.cuisine || "indian",
+            diet_type: user.diet || user.diet_type || "vegetarian",
+            user_prompt: user.user_prompt || ""
+        };
+
+        const res = await fetch("/api/plan/swap-item", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "Swap optimization failed.");
+        }
+
+        const data = await res.json();
+        updateActiveDayMealPlan(data.meal_plan, data.recipes);
+        closeSwapModal();
+        renderCurrentPlanView();
+    } catch (err) {
+        alert("Could not swap food: " + err.message);
+    }
+}
+
+function closeSwapModal() {
+    if (swapModal) {
+        swapModal.classList.remove("active");
+        swapModal.setAttribute("aria-hidden", "true");
+    }
+    if (swapModalBackdrop) {
+        swapModalBackdrop.classList.remove("active");
+    }
+}
+
+if (swapModalCloseBtn) swapModalCloseBtn.addEventListener("click", closeSwapModal);
+if (swapModalBackdrop) swapModalBackdrop.addEventListener("click", closeSwapModal);
 
 
 // ─── LocalStorage History Management ─────────────────────────────────────────
@@ -780,6 +1196,7 @@ function loadPlanFromHistory(historyItem) {
         document.getElementById("diet").value = dietVal;
     }
     if (u.cuisine) document.getElementById("cuisine").value = u.cuisine;
+    if (u.plan_days && document.getElementById("plan_days")) document.getElementById("plan_days").value = String(u.plan_days);
     if (u.user_prompt) document.getElementById("user_prompt").value = u.user_prompt;
 
     // Re-calculate biometrics
@@ -871,25 +1288,34 @@ function categorizeFood(foodName) {
 function generateGroceryData(plan) {
     if (!plan || !plan.response || !plan.response.meal_plan) return {};
 
-    const mealData = plan.response.meal_plan.meal_plan || {};
+    const mp = plan.response.meal_plan;
     const consolidated = {};
 
-    Object.keys(mealData).forEach(mealType => {
-        const items = mealData[mealType] || [];
-        items.forEach(item => {
-            const rawName = (item.food || "").trim();
-            if (!rawName) return;
+    function addMeals(mealData) {
+        if (!mealData) return;
+        Object.keys(mealData).forEach(mealType => {
+            const items = mealData[mealType] || [];
+            items.forEach(item => {
+                const rawName = (item.food || "").trim();
+                if (!rawName) return;
 
-            const category = categorizeFood(rawName);
-            if (!consolidated[category]) consolidated[category] = {};
+                const category = categorizeFood(rawName);
+                if (!consolidated[category]) consolidated[category] = {};
 
-            if (consolidated[category][rawName]) {
-                consolidated[category][rawName] += Number(item.grams) || 0;
-            } else {
-                consolidated[category][rawName] = Number(item.grams) || 0;
-            }
+                if (consolidated[category][rawName]) {
+                    consolidated[category][rawName] += Number(item.grams) || 0;
+                } else {
+                    consolidated[category][rawName] = Number(item.grams) || 0;
+                }
+            });
         });
-    });
+    }
+
+    if (mp.days && Array.isArray(mp.days) && mp.days.length > 0) {
+        mp.days.forEach(d => addMeals(d.meal_plan));
+    } else {
+        addMeals(mp.meal_plan || {});
+    }
 
     return consolidated;
 }
@@ -1049,6 +1475,7 @@ if (demoBtn) {
         document.getElementById("diet").value = "vegetarian";
         document.getElementById("cuisine").value = "indian";
         document.getElementById("meals").value = "4";
+        if (document.getElementById("plan_days")) document.getElementById("plan_days").value = "1";
         document.getElementById("allergies").value = "Peanuts";
         document.getElementById("user_prompt").value = "Quick authentic meals, high protein, flavorful spices, no oven";
 
