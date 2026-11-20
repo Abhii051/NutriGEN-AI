@@ -31,14 +31,92 @@ except ImportError:
 
 logger = logging.getLogger("nutrigen.recipe_llm")
 
-# Primary models supported on Groq with sub-second latency
+# Primary models supported on Groq with high reliability and fast response times
 GROQ_MODELS = [
-    "openai/gpt-oss-20b",
-    "openai/gpt-oss-120b",
-    "qwen/qwen3.8-27b",
-    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant"
 ]
 PRIMARY_GROQ_MODEL = GROQ_MODELS[0]
+
+
+ALLERGEN_SAFETY_CLUSTERS = {
+    "peanut": ["peanut", "groundnut", "arachis", "peanut butter"],
+    "groundnut": ["peanut", "groundnut", "arachis"],
+    "treenut": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "chestnut", "pine nut", "nut"],
+    "nut": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "peanut", "nut"],
+    "milk": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy", "lactose"],
+    "dairy": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy", "lactose"],
+    "lactose": ["milk", "whey", "casein", "cheese", "yogurt", "curd", "paneer", "dairy", "lactose"],
+    "egg": ["egg", "albumen", "egg white", "egg yolk", "omelet", "omelette", "bhurji", "mayonnaise"],
+    "soy": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
+    "soya": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
+    "soybean": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
+    "wheat": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "maida", "barley", "rye", "spelt"],
+    "gluten": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "barley", "rye", "spelt"],
+    "fish": ["fish", "salmon", "tuna", "sardine", "anchovy", "trout", "cod", "tilapia", "mackerel", "halibut", "snapper"],
+    "shellfish": ["shrimp", "prawn", "crab", "lobster", "clam", "oyster", "mussel", "scallop", "calamari", "squid", "octopus", "shellfish"],
+    "seafood": ["fish", "salmon", "tuna", "sardine", "shrimp", "prawn", "crab", "lobster", "clam", "oyster", "shellfish"],
+    "sesame": ["sesame", "tahini", "til", "gingelly"],
+    "mustard": ["mustard", "sarson", "rai"]
+}
+
+
+def validate_recipe_safety(recipe_dict: Dict[str, Any], prohibited_allergies: Optional[List[str]]) -> bool:
+    """
+    Validates that LLM-generated recipe text does not mention any prohibited allergen terms.
+    Expands input allergy categories to full clinical alias clusters.
+    If an allergen is found (e.g. LLM hallucinated peanut butter or almond), returns False so the
+    system falls back to the deterministic safe heuristic generator.
+    """
+    if not recipe_dict or not isinstance(recipe_dict, dict):
+        return False
+    if not prohibited_allergies:
+        return True
+
+    text_to_scan = (
+        str(recipe_dict.get("dish_title", "")) + " " +
+        " ".join(str(s) for s in recipe_dict.get("instructions", [])) + " " +
+        str(recipe_dict.get("chef_notes", ""))
+    ).lower()
+
+    # Expand prohibited allergies across canonical ontology
+    all_prohibited = []
+    for allergen in prohibited_allergies:
+        raw = str(allergen).lower().strip()
+        norm = re.sub(r"[^a-z0-9]", "", raw)
+        if norm.endswith("es") and len(norm) > 4:
+            norm = norm[:-2]
+        elif norm.endswith("s") and len(norm) > 3:
+            norm = norm[:-1]
+
+        matched = False
+        if norm in ALLERGEN_SAFETY_CLUSTERS:
+            all_prohibited.extend(ALLERGEN_SAFETY_CLUSTERS[norm])
+            matched = True
+        else:
+            for k, cluster in ALLERGEN_SAFETY_CLUSTERS.items():
+                if k in norm or k in raw:
+                    all_prohibited.extend(cluster)
+                    matched = True
+        if not matched:
+            all_prohibited.append(raw)
+
+    all_prohibited = list(dict.fromkeys(all_prohibited))
+
+    for term in all_prohibited:
+        if term == "egg":
+            pattern = r"\beggs?\b(?!plant)"
+        else:
+            pattern = rf"\b{re.escape(term)}s?\b"
+
+        if re.search(pattern, text_to_scan):
+            logger.warning(
+                f"Recipe safety validation failed: prohibited allergen term '{term}' "
+                f"detected in LLM output. Rejecting recipe."
+            )
+            return False
+
+    return True
 
 
 def extract_json_from_text(content: str) -> Optional[Dict[str, Any]]:
@@ -85,10 +163,11 @@ def generate_recipe_with_groq(
     user_prompt: str = "",
     cuisine: str = "indian",
     diet_type: str = "vegetarian",
+    allergies: Optional[List[str]] = None,
     api_key: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
-    Call Groq API running Meta Llama 3.1 8B (llama-3.1-8b-instant).
+    Call Groq API running Meta Llama 3.3 70B / 3.1 8B with strict allergy & macro constraints.
     """
     groq_api_key = api_key or os.getenv("GROQ_API_KEY")
     if not groq_api_key or not groq_api_key.strip():
@@ -106,14 +185,19 @@ def generate_recipe_with_groq(
         "You are an executive chef and sports nutritionist specializing in precision meal prep. "
         "Create an appetizing, practical recipe that strictly incorporates the exact optimizer ingredients and gram portions. "
         "Strictly adhere to the user's custom cooking constraints (cooking time, heat/spice level, appliances, dietary restrictions). "
+        "Do NOT add external unlisted ingredients (such as unallocated milk, oils, butter, or stock). Cooking water, salt, pepper, and dry spices are permitted. "
+        "NEVER suggest, include, or garnish with any allergen listed in the clinical allergy constraints. "
         "Output ONLY valid JSON with keys: 'dish_title' (string), 'cooking_time' (string), "
         "'instructions' (array of exactly 3 concise, chronological step strings), and 'chef_notes' (string)."
     )
+
+    allergy_warning = f"Clinical Allergies (STRICTLY PROHIBITED): {', '.join(allergies)}\n" if allergies else ""
 
     user_message = (
         f"Meal Category: {meal_type}\n"
         f"Cuisine Style: {cuisine}\n"
         f"Diet Type: {diet_type}\n"
+        f"{allergy_warning}"
         f"User Cooking Requests: {user_prompt or 'Standard healthy preparation'}\n\n"
         f"Exact Weighed Ingredients to use:\n{ingredients_text}\n\n"
         f"Return ONLY valid JSON with 'dish_title', 'cooking_time', 'instructions' (3 steps), and 'chef_notes'."
@@ -149,6 +233,14 @@ def generate_recipe_with_groq(
                     if parsed and "dish_title" in parsed and "instructions" in parsed:
                         if isinstance(parsed["instructions"], list) and len(parsed["instructions"]) > 3:
                             parsed["instructions"] = parsed["instructions"][:3]
+
+                        # Post-generation clinical validation of LLM output
+                        if allergies and not validate_recipe_safety(parsed, allergies):
+                            logger.warning(
+                                f"Groq ({model_name}) recipe failed allergen safety validation for {meal_type}. Trying next model."
+                            )
+                            continue
+
                         parsed["engine"] = f"Groq ({model_name})"
                         logger.info(f"Groq ({model_name}) successfully generated recipe for {meal_type}")
                         return parsed
@@ -165,7 +257,8 @@ def generate_fallback_recipe(
     meal_type: str,
     food_items: List[Dict[str, Any]],
     user_prompt: str = "",
-    cuisine: str = "indian"
+    cuisine: str = "indian",
+    allergies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Intelligent heuristic fallback recipe generator.
@@ -194,6 +287,13 @@ def generate_fallback_recipe(
         else:
             others.append(clean_name)
 
+    allocated_fats = [
+        clean_food_name(f["food"])
+        for f in food_items
+        if f.get("food_role") == "healthy_fat" or any(w in str(f.get("food", "")).lower() for w in ["ghee", "oil", "butter"])
+    ]
+    fat_instruction = f"with your measured {allocated_fats[0]}" if allocated_fats else "using non-stick cookware or water sauté"
+
     lead_staple = staples[0] if staples else (clean_food_name(food_items[0]["food"]) if food_items else "Grain")
     lead_protein = proteins[0] if proteins else (others[0] if others else "Protein")
     fresh_item = veggies_fruits[0] if veggies_fruits else (others[0] if others else "Fresh Herb")
@@ -211,38 +311,41 @@ def generate_fallback_recipe(
     time_match = re.search(r"(\d+)\s*(?:min|mins|minute|minutes)", prompt_lower)
     cook_time = f"{time_match.group(1)} mins" if time_match else ("15 mins" if is_quick else "20 mins")
 
-    spice_prefix = "Spiced " if is_spicy else ("Savory " if meal_type.lower() != "snack" else "Crispy ")
+    spice_prefix = "Spiced " if is_spicy else ("Savory " if "snack" not in meal_type.lower() else "Crispy ")
     method_style = "Skillet " if (no_oven or "skillet" in prompt_lower) else ("Quick " if is_quick else "Homestyle ")
 
     if meal_type.lower() == "breakfast":
         dish_title = f"{spice_prefix}{method_style}{lead_staple} & {lead_protein} Breakfast Bowl"
-        step1 = f"Prep: In a medium prep bowl, mix {lead_staple} with {lead_protein} and a splash of water or milk to form a uniform base."
-        step2 = f"Cook: Heat a non-stick skillet over medium-high heat with a dash of oil. Sauté {fresh_item} with {'a pinch of chili powder and turmeric' if is_spicy else 'light seasoning'} for 3-4 minutes until aromatic."
+        step1 = f"Prep: In a medium prep bowl, combine {lead_staple} with {lead_protein} and a splash of warm water to form a uniform base."
+        step2 = f"Cook: Heat a skillet over medium heat {fat_instruction}. Sauté {fresh_item} with {'a pinch of chili powder and turmeric' if is_spicy else 'light seasoning'} for 3-4 minutes until aromatic."
         step3 = f"Finish: Pour in the grain mixture and stir gently on stovetop for {cook_time} until golden and cooked through. Serve warm."
 
     elif meal_type.lower() == "lunch":
         dish_title = f"{spice_prefix}{lead_protein} & {lead_staple} Power Bowl with {fresh_item}"
         step1 = f"Prep: Rinse and simmer {lead_protein} and {lead_staple} in lightly salted water for 10-12 minutes until tender."
-        step2 = f"Sauté: In a separate pan on medium heat, toss {fresh_item} with {'cumin, chili, and cracked black pepper' if is_spicy else 'mild herbs and olive oil'} for 4 minutes."
+        step2 = f"Sauté: In a separate pan on medium heat {fat_instruction}, toss {fresh_item} with {'cumin, chili, and cracked black pepper' if is_spicy else 'mild aromatic herbs'} for 4 minutes."
         step3 = f"Assemble: Layer the cooked {lead_staple} and {lead_protein} into a bowl, top with seasoned {fresh_item}, and garnish with remaining ingredients."
 
     elif meal_type.lower() == "dinner":
         dish_title = f"{spice_prefix}Stovetop {lead_protein} Medley with {lead_staple} & Braised {fresh_item}"
-        step1 = f"Prep: Coarsely chop {fresh_item} and measure exact portions of {lead_staple} and {lead_protein}."
-        step2 = f"Simmer: Heat a skillet or sauce pot without oven. Sear {lead_protein} with {'crushed red peppers and warming spices' if is_spicy else 'aromatic spices'} for 5 minutes, then add {lead_staple} and 1/2 cup of broth."
+        step1 = f"Prep: Coarsely chop {fresh_item} and stage exact portions of {lead_staple} and {lead_protein}."
+        step2 = f"Simmer: Heat a skillet or sauce pot {fat_instruction}. Sear {lead_protein} with {'crushed red peppers and warming spices' if is_spicy else 'aromatic spices'} for 5 minutes, then add {lead_staple} and 1/2 cup of simmering water."
         step3 = f"Serve: Cover and simmer for {cook_time} until reduction forms a rich glaze. Fold in {fresh_item} and serve hot."
 
     else: # Snack
         dish_title = f"Artisan {lead_staple} & {fresh_item} Energy Crunch"
         step1 = f"Portion: Weigh and combine {', '.join(ingredients_summary)} in a serving bowl."
-        step2 = f"Toss: Lightly toast nuts/seeds in a dry pan for 2-3 minutes with {'a pinch of smoked paprika and sea salt' if is_spicy else 'cinnamon and sea salt'}."
-        step3 = f"Enjoy: Mix with the fruit/staple components and enjoy immediately as a nutrient-dense snack."
+        step2 = f"Toss: Lightly toast the dry ingredients in a skillet for 2-3 minutes with {'a pinch of smoked paprika and sea salt' if is_spicy else 'cinnamon and sea salt'}."
+        step3 = f"Enjoy: Mix with the fruit and staple components and enjoy immediately as a nutrient-dense snack."
+
+    allergy_note = f" (Allergen filter applied: strictly excluded {', '.join(allergies)})" if allergies else ""
 
     return {
         "dish_title": dish_title,
         "cooking_time": cook_time,
         "instructions": [step1, step2, step3],
-        "chef_notes": f"Prepared in under {cook_time} adhering strictly to {'stovetop only, spicy seasoning' if (is_spicy and no_oven) else 'your custom cooking requests'}."
+        "chef_notes": f"Prepared in under {cook_time} adhering strictly to {'stovetop only, spicy seasoning' if (is_spicy and no_oven) else 'your custom cooking requests'}.{allergy_note}",
+        "engine": "Heuristic Recipe Engine"
     }
 
 
@@ -252,11 +355,12 @@ def generate_recipe_for_meal(
     user_prompt: str = "",
     cuisine: str = "indian",
     diet_type: str = "vegetarian",
+    allergies: Optional[List[str]] = None,
     groq_api_key: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Main dispatch function:
-    1. Attempts Groq API (Meta Llama 3.1 8B)
+    1. Attempts Groq API (Meta Llama 3.3 70B / 3.1 8B)
     2. Falls back to OpenAI / Anthropic / Gemini if configured
     3. Falls back to smart heuristic recipe generator
     """
@@ -268,17 +372,19 @@ def generate_recipe_for_meal(
             "chef_notes": "Standard meal"
         }
 
-    # 1. Primary: Groq API with Meta Llama 3.1 8B
+    # 1. Primary: Groq API with Meta Llama
     recipe = generate_recipe_with_groq(
         meal_type=meal_type,
         food_items=food_items,
         user_prompt=user_prompt,
         cuisine=cuisine,
         diet_type=diet_type,
+        allergies=allergies,
         api_key=groq_api_key
     )
     if recipe:
-        recipe["engine"] = f"Groq ({PRIMARY_GROQ_MODEL})"
+        if "engine" not in recipe:
+            recipe["engine"] = f"Groq ({PRIMARY_GROQ_MODEL})"
         return recipe
 
     # 2. Heuristic fallback
@@ -286,7 +392,8 @@ def generate_recipe_for_meal(
         meal_type=meal_type,
         food_items=food_items,
         user_prompt=user_prompt,
-        cuisine=cuisine
+        cuisine=cuisine,
+        allergies=allergies
     )
-    fallback["engine"] = "Heuristic Fallback Engine"
+    fallback["engine"] = "Heuristic Recipe Engine"
     return fallback

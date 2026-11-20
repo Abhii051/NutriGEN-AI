@@ -25,7 +25,7 @@ def create_preferences(
     if disliked_foods is None:
         disliked_foods = []
 
-    diet_type = diet_type.lower().strip()
+    diet_type = str(diet_type).lower().strip().replace("_", "-")
     cuisine = cuisine.lower().strip()
 
     valid_diets = [
@@ -39,9 +39,9 @@ def create_preferences(
             "diet_type must be vegetarian, vegan, or non-vegetarian."
         )
 
-    if number_of_meals not in [3, 4, 5]:
+    if number_of_meals not in [2, 3, 4, 5]:
         raise ValueError(
-            "number_of_meals must be 3, 4, or 5."
+            "number_of_meals must be 2, 3, 4, or 5."
         )
 
     if number_of_snacks not in [0, 1, 2]:
@@ -263,97 +263,59 @@ def apply_allergy_filter(df, preferences):
     if not allergies:
         return df.reset_index(drop=True)
 
-    allergy_aliases = {
-        "peanut": [
-            "peanut",
-            "groundnut",
-            "arachis"
-        ],
+    def normalize_allergen_key(term: str) -> str:
+        """Strip punctuation and normalize plural suffixes for robust allergen ontology mapping."""
+        t = re.sub(r"[^a-z0-9]", "", str(term).lower())
+        if t.endswith("es") and len(t) > 4:
+            return t[:-2]
+        if t.endswith("s") and len(t) > 3:
+            return t[:-1]
+        return t
 
-        "tree_nuts": [
-            "almond",
-            "cashew",
-            "walnut",
-            "pistachio",
-            "pecan",
-            "hazelnut",
-            "macadamia",
-            "brazil nut"
-        ],
-
-        "milk": [
-            "milk",
-            "whey",
-            "casein",
-            "cheese",
-            "yogurt",
-            "yoghurt",
-            "curd",
-            "paneer",
-            "cream",
-            "butter",
-            "ghee"
-        ],
-
-        "egg": [
-            "egg",
-            "albumen",
-            "egg white",
-            "egg yolk"
-        ],
-
-        "soy": [
-            "soy",
-            "soya",
-            "soybean",
-            "tofu",
-            "tempeh",
-            "miso",
-            "edamame"
-        ],
-
-        "wheat": [
-            "wheat",
-            "flour",
-            "atta",
-            "semolina",
-            "durum",
-            "bulgur",
-            "couscous",
-            "gluten"
-        ],
-
-        "fish": [
-            "fish",
-            "salmon",
-            "tuna",
-            "sardine",
-            "anchovy",
-            "trout",
-            "cod"
-        ],
-
-        "shellfish": [
-            "shrimp",
-            "prawn",
-            "crab",
-            "lobster",
-            "clam",
-            "oyster",
-            "mussel",
-            "shellfish"
-        ]
+    canonical_clusters = {
+        "peanut": ["peanut", "groundnut", "arachis", "peanut butter", "monkey nut"],
+        "groundnut": ["peanut", "groundnut", "arachis"],
+        "treenut": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "chestnut", "pine nut", "nut"],
+        "nut": ["almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", "macadamia", "brazil nut", "peanut", "nut"],
+        "milk": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy", "lactose"],
+        "dairy": ["milk", "whey", "casein", "cheese", "yogurt", "yoghurt", "curd", "paneer", "cream", "butter", "ghee", "dairy", "lactose"],
+        "lactose": ["milk", "whey", "casein", "cheese", "yogurt", "curd", "paneer", "dairy", "lactose"],
+        "egg": ["egg", "albumen", "egg white", "egg yolk", "omelet", "omelette", "bhurji", "mayonnaise"],
+        "soy": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
+        "soya": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
+        "soybean": ["soy", "soya", "soybean", "tofu", "tempeh", "miso", "edamame"],
+        "wheat": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "maida", "barley", "rye", "spelt"],
+        "gluten": ["wheat", "flour", "atta", "semolina", "durum", "bulgur", "couscous", "gluten", "barley", "rye", "spelt"],
+        "fish": ["fish", "salmon", "tuna", "sardine", "anchovy", "trout", "cod", "tilapia", "mackerel", "halibut", "snapper"],
+        "shellfish": ["shrimp", "prawn", "crab", "lobster", "clam", "oyster", "mussel", "scallop", "calamari", "squid", "octopus", "shellfish"],
+        "seafood": ["fish", "salmon", "tuna", "sardine", "shrimp", "prawn", "crab", "lobster", "clam", "oyster", "shellfish"],
+        "sesame": ["sesame", "tahini", "til", "gingelly"],
+        "mustard": ["mustard", "sarson", "rai"]
     }
 
     expanded_terms = []
 
     for allergy in allergies:
-        allergy = allergy.lower().strip()
+        cleaned_raw = str(allergy).lower().strip()
+        norm = normalize_allergen_key(cleaned_raw)
+        matched = False
 
-        if allergy in allergy_aliases:
-            expanded_terms.extend(allergy_aliases[allergy])
+        # Direct canonical normalized match
+        if norm in canonical_clusters:
+            expanded_terms.extend(canonical_clusters[norm])
+            matched = True
         else:
-            expanded_terms.append(allergy)
+            # Substring/cluster scan across canonical ontology keys
+            for key, cluster in canonical_clusters.items():
+                if key in norm or key in cleaned_raw:
+                    expanded_terms.extend(cluster)
+                    matched = True
+
+        if not matched:
+            expanded_terms.append(cleaned_raw)
+
+    # De-duplicate expanded terms while preserving order
+    expanded_terms = list(dict.fromkeys(expanded_terms))
 
     mask = ~df["description"].fillna("").astype(str).str.lower().apply(
         lambda text: contains_food_term(text, expanded_terms)
@@ -389,101 +351,79 @@ def apply_disliked_food_filter(df, preferences):
 
 
 # =========================================================
-# INDIAN FOOD PRIORITY
+# MULTI-CUISINE SCORING & EVERYDAY FOOD PRIORITY
 # =========================================================
 
 def calculate_cuisine_score(df, preferences):
     """
-    Give Indian foods a higher preference score.
-
-    This does NOT remove non-Indian foods.
+    Scores foods based on the selected cuisine (Indian, Mediterranean, Japanese, Western).
+    When 'any' is selected, treats all cuisines equitably without biasing towards Indian.
     """
-
     df = df.copy()
-
-    cuisine = preferences["cuisine"]
-
+    cuisine = str(preferences.get("cuisine", "indian")).lower().strip()
     df["cuisine_score"] = 0
 
-    if cuisine != "indian":
+    is_any_cuisine = cuisine in ["any", "all", "global", "none", ""]
+
+    if is_any_cuisine:
+        # For 'any', give all curated everyday foods across all cuisines equal high priority
+        def score_row_any(row):
+            source = str(row.get("source_dataset", "")).lower()
+            if source == "everyday_foods_curated":
+                return 15
+            return 2
+
+        df["cuisine_score"] = df.apply(score_row_any, axis=1)
         return df
 
-    indian_food_terms = [
-        # Staples
-        "basmati",
-        "rice",
-        "atta",
-        "wheat",
-        "roti",
-        "chapati",
-        "millet",
-        "ragi",
-        "jowar",
-        "bajra",
+    CUISINE_TERMS = {
+        "indian": [
+            "poha", "upma", "idli", "dosa", "cheela", "chapati", "roti", "paratha", "naan",
+            "basmati", "rice", "khichdi", "dal", "lentil", "chana", "chickpea", "rajma", "moong",
+            "urad", "toor", "paneer", "curd", "dahi", "ghee", "makhana", "bhindi", "okra",
+            "palak", "spinach", "gourd", "lauki", "aloo", "cauliflower", "gobi", "chicken",
+            "egg", "bhurji", "omelette", "tikka", "tandoori", "biryani", "mutton", "fish", "curry"
+        ],
+        "mediterranean": [
+            "hummus", "tahini", "pita", "falafel", "feta", "tzatziki", "olive oil", "olive",
+            "salmon", "souvlaki", "lentil soup", "fakes", "couscous", "quinoa", "chickpea",
+            "greek salad", "greek yogurt", "cucumber", "tomato", "zucchini", "shakshuka", "tuna", "chicken"
+        ],
+        "japanese": [
+            "miso", "tofu", "wakame", "seaweed", "nori", "edamame", "teriyaki", "salmon",
+            "yakitori", "tamagoyaki", "soba", "udon", "short-grain rice", "sushi rice",
+            "bok choy", "shiitake", "sesame oil", "sesame seed", "chicken", "egg"
+        ],
+        "western": [
+            "oatmeal", "oats", "scrambled egg", "boiled egg", "chicken breast", "chicken", "salmon",
+            "turkey", "sweet potato", "broccoli", "toast", "whole wheat bread", "peanut butter",
+            "banana", "apple", "greek yogurt", "cottage cheese", "green beans", "tuna"
+        ]
+    }
 
-        # Pulses / legumes
-        "dal",
-        "lentil",
-        "chickpea",
-        "chana",
-        "rajma",
-        "kidney bean",
-        "mung",
-        "moong",
-        "urad",
-        "toor",
-        "pigeon pea",
+    terms = CUISINE_TERMS.get(cuisine, [])
 
-        # Indian vegetables / foods
-        "okra",
-        "bhindi",
-        "brinjal",
-        "eggplant",
-        "baingan",
-        "gourd",
-        "bottle gourd",
-        "bitter gourd",
-        "ridge gourd",
-        "drumstick",
+    def score_row(row):
+        score = 0
+        desc = str(row.get("description", "")).lower()
+        source = str(row.get("source_dataset", "")).lower()
+        food_cuisine = str(row.get("cuisine", "")).lower()
 
-        # Dairy / protein
-        "paneer",
-        "curd",
-        "dahi",
+        # Highest priority: curated everyday food matching this cuisine
+        if source == "everyday_foods_curated":
+            if food_cuisine == cuisine:
+                return 20
+            elif food_cuisine in ["indian", "mediterranean", "japanese", "western"] and food_cuisine != cuisine:
+                return -10
+            return 5
 
-        # Spices
-        "turmeric",
-        "cumin",
-        "jeera",
-        "coriander",
-        "cardamom",
-        "clove",
-        "ginger",
-        "garlic",
+        # Keyword matching for standard catalog items
+        if terms and contains_food_term(desc, terms):
+            score += 4
 
-        # Common Indian foods
-        "poha",
-        "upma",
-        "idli",
-        "dosa",
-        "sambar",
-    ]
+        return score
 
-    df["cuisine_score"] = (
-        df["description"]
-        .fillna("")
-        .astype(str)
-        .str.lower()
-        .apply(
-            lambda text: 1
-            if contains_food_term(
-                text,
-                indian_food_terms
-            )
-            else 0
-        )
-    )
-
+    df["cuisine_score"] = df.apply(score_row, axis=1)
     return df
 
 def deduplicate_candidates(df):
